@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+
+    <style>
+        div.scroll-container {
+            background-color: #333;
+            overflow: auto;
+            padding: 10px;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+            width: 40%;
+        }
+    </style>
+</head>
+<body>
+    <div class="scroll-container">
+        {{range .Images}}
+            <img src="{{.Path}}" alt="img_{{.Index}}"/>
+        {{end}}
+    </div>
+</body>
+</html>
+

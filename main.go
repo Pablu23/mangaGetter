@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"regexp"
+	"sync"
 )
 
 type Image struct {
@@ -95,24 +96,30 @@ func getPrev(html string) (subUrl string, err error) {
 	return match[1], err
 }
 
-func appendImagesToBuf(html string, imageBufs map[string]*bytes.Buffer) ([]Image, error) {
+func appendImagesToBuf(html string, imageBuffs map[string]*bytes.Buffer) ([]Image, error) {
 	imgList, err := getImageList(html)
 	if err != nil {
 		return nil, err
 	}
 
-	images := make([]Image, 0)
+	images := make([]Image, len(imgList))
 
+	wg := sync.WaitGroup{}
 	for i, url := range imgList {
-		buf, err := addFileToRam(url)
-		if err != nil {
-			panic(err)
-		}
-		name := filepath.Base(url)
-		imageBufs[name] = buf
-		images = append(images, Image{Path: name, Index: i})
+		wg.Add(1)
+		go func(i int, url string, wg *sync.WaitGroup) {
+			buf, err := addFileToRam(url)
+			if err != nil {
+				panic(err)
+			}
+			name := filepath.Base(url)
+			imageBuffs[name] = buf
+			images[i] = Image{Path: name, Index: i}
+			wg.Done()
+		}(i, url, &wg)
 	}
 
+	wg.Wait()
 	return images, nil
 }
 
@@ -182,12 +189,16 @@ func main() {
 	server.CurrViewModel = &ImageViewModel{Images: imagesCurr}
 
 	http.HandleFunc("/", server.HandleCurrent)
-	http.HandleFunc("/{url}/", server.HandleImage)
+	http.HandleFunc("/img/{url}/", server.HandleImage)
 	http.HandleFunc("POST /next", server.handleNext)
 	http.HandleFunc("POST /prev", server.handlePrev)
 
 	fmt.Println("Server running")
-	http.ListenAndServe(":8000", nil)
+	err = http.ListenAndServe(":8000", nil)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 }
 
 func (s *Server) HandleImage(w http.ResponseWriter, r *http.Request) {
@@ -200,7 +211,10 @@ func (s *Server) HandleImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "image/webp")
-	w.Write(buf.Bytes())
+	_, err := w.Write(buf.Bytes())
+	if err != nil {
+		fmt.Println(err)
+	}
 }
 
 func (s *Server) handleNext(w http.ResponseWriter, r *http.Request) {
@@ -302,9 +316,12 @@ func (s *Server) handlePrev(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 }
 
-func (s *Server) HandleCurrent(w http.ResponseWriter, r *http.Request) {
+func (s *Server) HandleCurrent(w http.ResponseWriter, _ *http.Request) {
 	tmpl := template.Must(template.ParseFiles("test.html"))
-	tmpl.Execute(w, s.CurrViewModel)
+	err := tmpl.Execute(w, s.CurrViewModel)
+	if err != nil {
+		fmt.Println(err)
+	}
 }
 
 func addFileToRam(url string) (*bytes.Buffer, error) {
@@ -313,7 +330,12 @@ func addFileToRam(url string) (*bytes.Buffer, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			fmt.Println(err)
+		}
+	}(resp.Body)
 
 	buf := new(bytes.Buffer)
 

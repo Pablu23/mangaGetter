@@ -311,20 +311,22 @@ func (s *Server) AppendImagesToBuf(html string) ([]Image, error) {
 func (s *Server) HandleMenu(w http.ResponseWriter, r *http.Request) {
 	tmpl := template.Must(template.ParseFiles("menu.gohtml"))
 
-	all := s.DbMgr.Mangas.All()
+	all := s.DbMgr.Mangas
 	l := len(all)
 	mangaViewModels := make([]MangaViewModel, l)
+	counter := 0
 
-	for i, manga := range all {
+	for _, manga := range all {
 		title := cases.Title(language.English, cases.Compact).String(strings.Replace(manga.Title, "-", " ", -1))
 
-		mangaViewModels[i] = MangaViewModel{
+		mangaViewModels[counter] = MangaViewModel{
 			Title:  title,
-			Number: manga.LatestChapter.Value.Number,
+			Number: manga.LatestChapter.Number,
 			// I Hate this time Format... 15 = hh, 04 = mm, 02 = DD, 01 = MM, 06 == YY
 			LastTime: time.Unix(manga.TimeStampUnix, 0).Format("15:04 (02-01-06)"),
-			Url:      manga.LatestChapter.Value.Url,
+			Url:      manga.LatestChapter.Url,
 		}
+		counter++
 	}
 
 	menuViewModel := MenuViewModel{

@@ -2,11 +2,11 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"regexp"
 )
@@ -16,15 +16,52 @@ type Image struct {
 	Index int
 }
 
-type ImageData struct {
+type ImageViewModel struct {
 	Images []Image
 }
 
-func main() {
-	resp, err := http.Get("https://bato.to/title/80381-i-stan-the-prince/1525068-ch_1?load=2")
+type Server struct {
+	PrevViewModel *ImageViewModel
+	CurrViewModel *ImageViewModel
+	NextViewModel *ImageViewModel
+	ImageBuffers  map[string]*bytes.Buffer
+	NextSubUrl    string
+}
+
+func getImageList(html string) ([]string, error) {
+	reg, err := regexp.Compile(`<astro-island.*props=".*;imageFiles&quot;:\[1,&quot;\[(.*)]&quot;]`)
+	if err != nil {
+		return nil, err
+	}
+	m := reg.FindStringSubmatch(html)
+
+	if len(m) <= 0 {
+		return nil, errors.New("no new images")
+	}
+	match := m[1]
+
+	reg, err = regexp.Compile(`\[0,\\&quot;([^&]*)\\&quot;]`)
+	if err != nil {
+		return nil, err
+	}
+
+	matches := reg.FindAllStringSubmatch(match, -1)
+	l := len(matches)
+	result := make([]string, l)
+	for i, m := range matches {
+		result[i] = m[1]
+	}
+
+	return result, nil
+}
+
+func getHtmlFor(titleSubUrl string) (string, error) {
+	url := fmt.Sprintf("https://bato.to%s?load=2", titleSubUrl)
+	resp, err := http.Get(url)
+
 	// TODO: Testing for above 300 is dirty
 	if err != nil && resp.StatusCode > 300 {
-		panic(err)
+		return "", errors.New("could not get html")
 	}
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
@@ -33,80 +70,175 @@ func main() {
 		}
 	}(resp.Body)
 
-	create, err := os.Create("h.html")
-	if err != nil {
-		panic(err)
-	}
-	defer func(create *os.File) {
-		err := create.Close()
-		if err != nil {
-			fmt.Printf("Could not close file because: %v\n", err)
-		}
-	}(create)
-
 	all, err := io.ReadAll(resp.Body)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
-	_, err = create.Write(all)
-	if err != nil {
-		panic(err)
-	}
-
-	reg, err := regexp.Compile(`<astro-island.*props=".*;imageFiles&quot;:\[1,&quot;\[(.*)]&quot;]`)
-	if err != nil {
-		panic(err)
-	}
-
 	h := string(all)
-	match := reg.FindStringSubmatch(h)[1]
-	reg, err = regexp.Compile(`\[0,\\&quot;([^&]*)\\&quot;]`)
-	if err != nil {
-		panic(err)
-	}
-	findings, err := os.Create("findings.txt")
-	if err != nil {
-		panic(err)
-	}
-	defer func(findings *os.File) {
-		err := findings.Close()
-		if err != nil {
-			fmt.Printf("Could not close file because: %v\n", err)
-		}
-	}(findings)
 
-	matches := reg.FindAllStringSubmatch(match, -1)
+	return h, nil
+}
+
+func getNext(html string) (subUrl string, err error) {
+	reg, err := regexp.Compile(`<a data-hk="0-6-0" .* href="(.*?)["']`)
+	match := reg.FindStringSubmatch(html)
+
+	return match[1], err
+}
+
+func appendImagesToBuf(lastHtml string, imageBufs map[string]*bytes.Buffer) ([]Image, error) {
+	next, err := getNext(lastHtml)
+	if err != nil {
+		return nil, err
+	}
+
+	html, err := getHtmlFor(next)
+	if err != nil {
+		return nil, err
+	}
+
+	imgList, err := getImageList(html)
+	if err != nil {
+		return nil, err
+	}
+
 	images := make([]Image, 0)
 
-	imageBufs := make(map[string]*bytes.Buffer)
-
-	for i, m := range matches {
-		//err = downloadFile(m[1])
-		buf, err := addFileToRam(m[1])
+	for i, url := range imgList {
+		buf, err := addFileToRam(url)
 		if err != nil {
 			panic(err)
 		}
-		name := filepath.Base(m[1])
+		name := filepath.Base(url)
 		imageBufs[name] = buf
 		images = append(images, Image{Path: name, Index: i})
 	}
 
-	tmpl := template.Must(template.ParseFiles("test.html"))
+	return images, nil
+}
 
-	data := ImageData{Images: images}
+func main() {
+	h, err := getHtmlFor("/title/143267-blooming-love/2636103-ch_20")
+	if err != nil {
+		panic(err)
+	}
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		tmpl.Execute(w, data)
-	})
-	http.HandleFunc("/{url}/", func(w http.ResponseWriter, r *http.Request) {
-		u := r.PathValue("url")
-		buf := imageBufs[u]
+	imgList, err := getImageList(h)
+	if err != nil {
+		panic(err)
+	}
 
-		w.Header().Set("Content-Type", "image/webp")
-		buf.WriteTo(w)
-	})
+	server := Server{
+		PrevViewModel: nil,
+		CurrViewModel: nil,
+		NextViewModel: nil,
+		ImageBuffers:  make(map[string]*bytes.Buffer),
+		// Weird error IDK why this is, but it works like this, so it is what it is
+		NextSubUrl: "/title/143267-blooming-love/2636103-ch_20",
+	}
+
+	go func(s *Server) {
+		html, err := getHtmlFor(s.NextSubUrl)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		imagesNext, err := appendImagesToBuf(html, s.ImageBuffers)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		s.NextViewModel = &ImageViewModel{Images: imagesNext}
+		next, err := getNext(html)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		s.NextSubUrl = next
+		fmt.Println("Finished loading next")
+	}(&server)
+
+	images := make([]Image, 0)
+	for i, url := range imgList {
+		buf, err := addFileToRam(url)
+		if err != nil {
+			panic(err)
+		}
+		name := filepath.Base(url)
+		server.ImageBuffers[name] = buf
+		images = append(images, Image{Path: name, Index: i})
+	}
+
+	server.CurrViewModel = &ImageViewModel{Images: images}
+
+	http.HandleFunc("/", server.HandleCurrent)
+	http.HandleFunc("/{url}/", server.HandleImage)
+	http.HandleFunc("POST /next", server.handleNext)
+
 	fmt.Println("Server running")
 	http.ListenAndServe(":8000", nil)
+}
+
+func (s *Server) HandleImage(w http.ResponseWriter, r *http.Request) {
+	u := r.PathValue("url")
+	buf := s.ImageBuffers[u]
+	if buf == nil {
+		fmt.Printf("url: %s is nil\n", u)
+		w.WriteHeader(400)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/webp")
+	w.Write(buf.Bytes())
+}
+
+func (s *Server) handleNext(w http.ResponseWriter, r *http.Request) {
+	if s.PrevViewModel != nil {
+		go func(viewModel ImageViewModel, s *Server) {
+			for _, img := range viewModel.Images {
+				delete(s.ImageBuffers, img.Path)
+			}
+			fmt.Println("Cleaned out of scope Last")
+		}(*s.PrevViewModel, s)
+	}
+
+	s.PrevViewModel = s.CurrViewModel
+	s.CurrViewModel = s.NextViewModel
+
+	go func(s *Server) {
+		html, err := getHtmlFor(s.NextSubUrl)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		imagesNext, err := appendImagesToBuf(html, s.ImageBuffers)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		s.NextViewModel = &ImageViewModel{Images: imagesNext}
+		next, err := getNext(html)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Println(next)
+
+		s.NextSubUrl = next
+		fmt.Println("Loaded next")
+	}(s)
+
+	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+}
+
+func (s *Server) HandleCurrent(w http.ResponseWriter, r *http.Request) {
+	tmpl := template.Must(template.ParseFiles("test.html"))
+	tmpl.Execute(w, s.CurrViewModel)
 }
 
 func addFileToRam(url string) (*bytes.Buffer, error) {
@@ -122,24 +254,4 @@ func addFileToRam(url string) (*bytes.Buffer, error) {
 	// Write the body to file
 	_, err = io.Copy(buf, resp.Body)
 	return buf, err
-}
-
-func downloadFile(url string) error {
-	// Get the data
-	resp, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	// Create the file
-	out, err := os.Create(filepath.Base(url))
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	// Write the body to file
-	_, err = io.Copy(out, resp.Body)
-	return err
 }

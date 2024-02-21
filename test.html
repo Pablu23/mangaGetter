@@ -5,14 +5,29 @@
     <title>Title</title>
 
     <style>
-        div.scroll-container {
-            background-color: #333;
+        .scroll-container {
             overflow: auto;
-            padding: 10px;
-            display: block;
             margin-left: auto;
             margin-right: auto;
-            width: 40%;
+            padding-bottom: 0;
+            margin-bottom: 0;
+            width: 100%;
+
+            display: block;
+            box-sizing: border-box;
+            border-width: 0;
+            border-style: solid;
+            border-color: white;
+        }
+
+        .scroll-container img {
+            padding: 0;
+            display: block;
+            min-width: 40%;
+            margin-left: auto;
+            margin-right: auto;
+
+            vertical-align: middle;
         }
     </style>
 </head>
@@ -21,6 +36,11 @@
         {{range .Images}}
             <img src="{{.Path}}" alt="img_{{.Index}}"/>
         {{end}}
+    </div>
+    <div>
+        <form method="post" action="/next">
+            <input type="submit">
+        </form>
     </div>
 </body>
 </html>

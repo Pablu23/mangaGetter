@@ -25,7 +25,7 @@ func (b *Bato) GetImageList(html string) ([]string, error) {
 	m := reg.FindStringSubmatch(html)
 
 	if len(m) <= 0 {
-		return nil, &NoMoreError{Err: errors.New("no more content")}
+		return nil, errors.New("no more content")
 	}
 	match := m[1]
 

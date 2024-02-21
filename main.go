@@ -9,14 +9,6 @@ import (
 	"sync"
 )
 
-type NoMoreError struct {
-	Err error
-}
-
-func (e *NoMoreError) Error() string {
-	return e.Err.Error()
-}
-
 type Image struct {
 	Path  string
 	Index int
@@ -27,6 +19,17 @@ type ImageViewModel struct {
 	Images []Image
 }
 
+type MangaViewModel struct {
+	Title    string
+	Number   int
+	LastTime string
+	Url      string
+}
+
+type MenuViewModel struct {
+	Mangas []MangaViewModel
+}
+
 func main() {
 	db := NewDatabase("db.sqlite", true)
 	err := db.Open()
@@ -34,22 +37,21 @@ func main() {
 		return
 	}
 
-	var latestTimeStamp int64 = 0
-	var latestUrl string
-	for _, m := range db.Mangas {
-		if latestTimeStamp < m.LatestChapter.TimeStampUnix {
-			latestTimeStamp = m.LatestChapter.TimeStampUnix
-			latestUrl = m.LatestChapter.Url
-		}
-	}
-
-	if latestUrl == "" {
-		latestUrl = "/title/80381-i-stan-the-prince/1539086-ch_16"
-	}
+	//var latestTimeStamp int64 = 0
+	//var latestUrl string
+	//for _, m := range db.Mangas {
+	//	if latestTimeStamp < m.LatestChapter.TimeStampUnix {
+	//		latestTimeStamp = m.LatestChapter.TimeStampUnix
+	//		latestUrl = m.LatestChapter.Url
+	//	}
+	//}
+	//
+	//if latestUrl == "" {
+	//	latestUrl = "/title/80381-i-stan-the-prince/1539086-ch_16"
+	//}
 
 	server := Server{
 		ImageBuffers: make(map[string]*bytes.Buffer),
-		CurrSubUrl:   latestUrl,
 		NextReady:    make(chan bool),
 		PrevReady:    make(chan bool),
 		Provider:     &Bato{},
@@ -66,18 +68,17 @@ func main() {
 		}
 	}()
 
-	server.LoadCurr()
-	go server.LoadPrev()
-	go server.LoadNext()
+	//server.LoadCurr()
+	//go server.LoadPrev()
+	//go server.LoadNext()
 
-	http.HandleFunc("/", server.HandleCurrent)
+	http.HandleFunc("/", server.HandleMenu)
+	http.HandleFunc("/new/title/{title}/{chapter}", server.HandleNew)
+	http.HandleFunc("/current/", server.HandleCurrent)
 	http.HandleFunc("/img/{url}/", server.HandleImage)
 	http.HandleFunc("POST /next", server.HandleNext)
 	http.HandleFunc("POST /prev", server.HandlePrev)
-	http.HandleFunc("POST /exit", func(_ http.ResponseWriter, _ *http.Request) {
-		Close(&db)
-	})
-	http.HandleFunc("/new/{title}/{chapter}", server.HandleNew)
+	http.HandleFunc("POST /exit", server.HandleExit)
 
 	fmt.Println("Server starting...")
 	err = http.ListenAndServe(":8000", nil)

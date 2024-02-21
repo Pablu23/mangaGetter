@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"golang.org/x/text/language"
 	"html/template"
 	"net/http"
 	"path/filepath"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/text/cases"
 )
 
 type Server struct {
@@ -78,7 +81,7 @@ func (s *Server) HandleNext(w http.ResponseWriter, r *http.Request) {
 
 	go s.LoadNext()
 
-	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+	http.Redirect(w, r, "/current/", http.StatusTemporaryRedirect)
 }
 
 func (s *Server) LoadNext() {
@@ -181,58 +184,59 @@ func (s *Server) HandlePrev(w http.ResponseWriter, r *http.Request) {
 
 	go s.LoadPrev()
 
-	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+	http.Redirect(w, r, "/current/", http.StatusTemporaryRedirect)
 }
 
 func (s *Server) HandleCurrent(w http.ResponseWriter, _ *http.Request) {
-	tmpl := template.Must(template.ParseFiles("test.gohtml"))
+	tmpl := template.Must(template.ParseFiles("viewer.gohtml"))
+
+	err := tmpl.Execute(w, s.CurrViewModel)
+	if err != nil {
+		fmt.Println(err)
+	}
 
 	mangaId, chapterId, err := getMangaIdAndChapterId(s.CurrSubUrl)
 	if err != nil {
 		fmt.Println(err)
-	} else {
-		title, chapter, err := getTitleAndChapter(s.CurrSubUrl)
-		if err != nil {
-			fmt.Println(err)
-		} else {
-			var manga *Manga
-			if s.DbMgr.Mangas[mangaId] == nil {
-				manga = &Manga{
-					Id:            mangaId,
-					Title:         title,
-					TimeStampUnix: time.Now().Unix(),
-				}
-				s.DbMgr.Mangas[mangaId] = manga
-			} else {
-				manga = s.DbMgr.Mangas[mangaId]
-				s.DbMgr.Mangas[mangaId].TimeStampUnix = time.Now().Unix()
-			}
-
-			if s.DbMgr.Chapters[chapterId] == nil {
-				chapterNumberStr := strings.Replace(chapter, "ch_", "", 1)
-				number, err := strconv.Atoi(chapterNumberStr)
-				if err != nil {
-					fmt.Println(err)
-					number = 0
-				}
-
-				s.DbMgr.Chapters[chapterId] = &Chapter{
-					Id:            chapterId,
-					Manga:         manga,
-					Url:           s.CurrSubUrl,
-					Name:          chapter,
-					Number:        number,
-					TimeStampUnix: time.Now().Unix(),
-				}
-			} else {
-				s.DbMgr.Chapters[chapterId].TimeStampUnix = time.Now().Unix()
-			}
-		}
+		return
 	}
-
-	err = tmpl.Execute(w, s.CurrViewModel)
+	title, chapter, err := getTitleAndChapter(s.CurrSubUrl)
 	if err != nil {
 		fmt.Println(err)
+		return
+	}
+
+	var manga Manga
+	if !s.DbMgr.Mangas.SetIfNil(mangaId, Manga{
+		Id:            mangaId,
+		Title:         title,
+		TimeStampUnix: time.Now().Unix(),
+	}) {
+		manga = s.DbMgr.Mangas.Get(mangaId)
+		manga.TimeStampUnix = time.Now().Unix()
+
+		s.DbMgr.Mangas.Set(mangaId, manga)
+	}
+
+	chapterNumberStr := strings.Replace(chapter, "ch_", "", 1)
+	number, err := strconv.Atoi(chapterNumberStr)
+	if err != nil {
+		fmt.Println(err)
+		number = 0
+	}
+
+	if !s.DbMgr.Chapters.SetIfNil(chapterId, Chapter{
+		Id:            chapterId,
+		Manga:         Ok(manga),
+		Url:           s.CurrSubUrl,
+		Name:          chapter,
+		Number:        number,
+		TimeStampUnix: time.Now().Unix(),
+	}) {
+		chapter := s.DbMgr.Chapters.Get(chapterId)
+		chapter.TimeStampUnix = time.Now().Unix()
+
+		s.DbMgr.Chapters.Set(mangaId, chapter)
 	}
 }
 
@@ -253,7 +257,7 @@ func (s *Server) HandleNew(w http.ResponseWriter, r *http.Request) {
 	go s.LoadNext()
 	go s.LoadPrev()
 
-	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+	http.Redirect(w, r, "/current/", http.StatusTemporaryRedirect)
 }
 
 func (s *Server) LoadCurr() {
@@ -303,4 +307,43 @@ func (s *Server) AppendImagesToBuf(html string) ([]Image, error) {
 
 	wg.Wait()
 	return images, nil
+}
+
+func (s *Server) HandleMenu(w http.ResponseWriter, r *http.Request) {
+	tmpl := template.Must(template.ParseFiles("menu.gohtml"))
+
+	all := s.DbMgr.Mangas.All()
+	l := len(all)
+	mangaViewModels := make([]MangaViewModel, l)
+
+	for i, manga := range all {
+		title := cases.Title(language.English, cases.Compact).String(strings.Replace(manga.Title, "-", " ", -1))
+
+		mangaViewModels[i] = MangaViewModel{
+			Title:  title,
+			Number: manga.LatestChapter.Value.Number,
+			// I Hate this time Format... 15 = hh, 04 = mm, 02 = DD, 01 = MM, 06 == YY
+			LastTime: time.Unix(manga.TimeStampUnix, 0).Format("15:04 (02-01-06)"),
+			Url:      manga.LatestChapter.Value.Url,
+		}
+	}
+
+	menuViewModel := MenuViewModel{
+		Mangas: mangaViewModels,
+	}
+
+	err := tmpl.Execute(w, menuViewModel)
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+func (s *Server) HandleExit(w http.ResponseWriter, r *http.Request) {
+	err := s.DbMgr.Save()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 }

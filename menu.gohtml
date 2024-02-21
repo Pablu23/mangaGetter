@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Main Menu</title>
+</head>
+<body>
+    <form method="post" action="/new/">
+
+    </form>
+
+    {{range .Mangas}}
+        <div>
+            <text>Title: {{.Title}}</text>
+            <text>Current Chapter: {{.Number}}</text>
+            <text>Last Accessed: {{.LastTime}}</text>
+            <a href="/new/{{.Url}}}" class="button">Go to last Chapter</a>
+        </div>
+    {{end}}
+</body>
+</html>

@@ -3,8 +3,8 @@ package main
 import (
 	"database/sql"
 	_ "embed"
-
 	_ "github.com/mattn/go-sqlite3"
+	"sync"
 )
 
 type Manga struct {
@@ -13,12 +13,12 @@ type Manga struct {
 	TimeStampUnix int64
 
 	// Not in DB
-	LatestChapter *Chapter
+	LatestChapter Option[Chapter]
 }
 
 type Chapter struct {
 	Id            int
-	Manga         *Manga
+	Manga         Option[Manga]
 	Url           string
 	Name          string
 	Number        int
@@ -28,8 +28,10 @@ type Chapter struct {
 type DatabaseManager struct {
 	ConnectionString string
 	db               *sql.DB
-	Mangas           map[int]*Manga
-	Chapters         map[int]*Chapter
+
+	// TODO(Pablu23): This probably needs a mutex?
+	Mangas   *ConcurrentMap[int, Manga]
+	Chapters *ConcurrentMap[int, Chapter]
 
 	CreateIfNotExists bool
 }
@@ -38,8 +40,14 @@ func NewDatabase(connectionString string, createIfNotExists bool) DatabaseManage
 	return DatabaseManager{
 		ConnectionString: connectionString,
 
-		Mangas:            make(map[int]*Manga),
-		Chapters:          make(map[int]*Chapter),
+		Mangas: &ConcurrentMap[int, Manga]{
+			lock:  sync.RWMutex{},
+			dirty: make(map[int]Option[Manga]),
+		},
+		Chapters: &ConcurrentMap[int, Chapter]{
+			lock:  sync.RWMutex{},
+			dirty: make(map[int]Option[Chapter]),
+		},
 		CreateIfNotExists: createIfNotExists,
 	}
 }
@@ -75,7 +83,7 @@ func (dbMgr *DatabaseManager) Close() error {
 func (dbMgr *DatabaseManager) Save() error {
 	db := dbMgr.db
 
-	for _, m := range dbMgr.Mangas {
+	for _, m := range dbMgr.Mangas.All() {
 		count := 0
 		err := db.QueryRow("SELECT COUNT(*) FROM Manga where ID = ?", m.Id).Scan(&count)
 		if err != nil {
@@ -95,7 +103,7 @@ func (dbMgr *DatabaseManager) Save() error {
 		}
 	}
 
-	for _, c := range dbMgr.Chapters {
+	for _, c := range dbMgr.Chapters.All() {
 		count := 0
 		err := db.QueryRow("SELECT COUNT(*) FROM Chapter where ID = ?", c.Id).Scan(&count)
 		if err != nil {
@@ -103,7 +111,7 @@ func (dbMgr *DatabaseManager) Save() error {
 		}
 
 		if count == 0 {
-			_, err := db.Exec("INSERT INTO Chapter(ID, MangaID, Url, Name, Number, TimeStampUnixEpoch) VALUES (?, ?, ?, ?, ?, ?)", c.Id, c.Manga.Id, c.Url, c.Name, c.Number, c.TimeStampUnix)
+			_, err := db.Exec("INSERT INTO Chapter(ID, MangaID, Url, Name, Number, TimeStampUnixEpoch) VALUES (?, ?, ?, ?, ?, ?)", c.Id, c.Manga.Value.Id, c.Url, c.Name, c.Number, c.TimeStampUnix)
 			if err != nil {
 				return err
 			}
@@ -138,7 +146,7 @@ func (dbMgr *DatabaseManager) load() error {
 		if err = rows.Scan(&manga.Id, &manga.Title, &manga.TimeStampUnix); err != nil {
 			return err
 		}
-		dbMgr.Mangas[manga.Id] = &manga
+		dbMgr.Mangas.Set(manga.Id, manga)
 	}
 
 	rows, err = db.Query("SELECT * FROM Chapter")
@@ -153,12 +161,15 @@ func (dbMgr *DatabaseManager) load() error {
 			return err
 		}
 
-		chapter.Manga = dbMgr.Mangas[mangaID]
-		if dbMgr.Mangas[mangaID].LatestChapter == nil || dbMgr.Mangas[mangaID].LatestChapter.TimeStampUnix < chapter.TimeStampUnix {
-			dbMgr.Mangas[mangaID].LatestChapter = &chapter
+		// TODO: Does this actually work?
+		manga := dbMgr.Mangas.Get(mangaID)
+		chapter.Manga = Ok(manga)
+		if !dbMgr.Mangas.Get(mangaID).LatestChapter.Set || dbMgr.Mangas.Get(mangaID).LatestChapter.Value.TimeStampUnix < chapter.TimeStampUnix {
+			manga.LatestChapter = Ok(chapter)
+			dbMgr.Mangas.Set(mangaID, manga)
 		}
 
-		dbMgr.Chapters[chapter.Id] = &chapter
+		dbMgr.Chapters.Set(chapter.Id, chapter)
 	}
 
 	return nil

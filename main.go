@@ -9,8 +9,17 @@ import (
 	"net/http"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
 )
+
+type NoMoreError struct {
+	Err error
+}
+
+func (e *NoMoreError) Error() string {
+	return "no more images available"
+}
 
 type Image struct {
 	Path  string
@@ -18,6 +27,7 @@ type Image struct {
 }
 
 type ImageViewModel struct {
+	Title  string
 	Images []Image
 }
 
@@ -29,6 +39,14 @@ type Server struct {
 	NextSubUrl    string
 	CurrSubUrl    string
 	PrevSubUrl    string
+
+	IsFirst bool
+	IsLast  bool
+
+	// I'm not even sure if this helps
+	// If you press next and then prev too fast you still lock yourself out
+	NextReady chan bool
+	PrevReady chan bool
 }
 
 func getImageList(html string) ([]string, error) {
@@ -39,7 +57,7 @@ func getImageList(html string) ([]string, error) {
 	m := reg.FindStringSubmatch(html)
 
 	if len(m) <= 0 {
-		return nil, errors.New("no new images")
+		return nil, &NoMoreError{Err: errors.New("no more content")}
 	}
 	match := m[1]
 
@@ -125,76 +143,26 @@ func appendImagesToBuf(html string, imageBuffs map[string]*bytes.Buffer) ([]Imag
 
 func main() {
 	curr := "/title/143267-blooming-love/2636103-ch_20"
-	h, err := getHtmlFor(curr)
-	if err != nil {
-		panic(err)
-	}
-
-	n, err := getNext(h)
-	if err != nil {
-		panic(err)
-	}
-
-	p, err := getPrev(h)
-	if err != nil {
-		panic(err)
-	}
 
 	server := Server{
-		PrevViewModel: nil,
-		CurrViewModel: nil,
-		NextViewModel: nil,
-		ImageBuffers:  make(map[string]*bytes.Buffer),
-		// Weird error IDK why this is, but it works like this, so it is what it is
-		NextSubUrl: n, //"/title/143267-blooming-love/2636103-ch_20",
-		PrevSubUrl: p,
-		CurrSubUrl: curr,
+		ImageBuffers: make(map[string]*bytes.Buffer),
+		CurrSubUrl:   curr,
+		NextReady:    make(chan bool),
+		PrevReady:    make(chan bool),
 	}
 
-	go func(s *Server) {
-		html, err := getHtmlFor(s.PrevSubUrl)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-
-		imagesNext, err := appendImagesToBuf(html, s.ImageBuffers)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-
-		s.PrevViewModel = &ImageViewModel{Images: imagesNext}
-		fmt.Println("Finished loading prev")
-	}(&server)
-
-	go func(s *Server) {
-		html, err := getHtmlFor(s.NextSubUrl)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-
-		imagesNext, err := appendImagesToBuf(html, s.ImageBuffers)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		s.NextViewModel = &ImageViewModel{Images: imagesNext}
-		fmt.Println("Finished loading next")
-	}(&server)
-
-	imagesCurr, err := appendImagesToBuf(h, server.ImageBuffers)
-
-	server.CurrViewModel = &ImageViewModel{Images: imagesCurr}
+	server.loadCurr()
+	go server.loadPrev()
+	go server.loadNext()
 
 	http.HandleFunc("/", server.HandleCurrent)
 	http.HandleFunc("/img/{url}/", server.HandleImage)
 	http.HandleFunc("POST /next", server.handleNext)
 	http.HandleFunc("POST /prev", server.handlePrev)
+	http.HandleFunc("/new/{title}/{chapter}", server.HandleNew)
 
 	fmt.Println("Server running")
-	err = http.ListenAndServe(":8000", nil)
+	err := http.ListenAndServe(":8000", nil)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -234,38 +202,107 @@ func (s *Server) handleNext(w http.ResponseWriter, r *http.Request) {
 	s.PrevSubUrl = s.CurrSubUrl
 	s.CurrSubUrl = s.NextSubUrl
 
-	go func(s *Server) {
-		c, err := getHtmlFor(s.CurrSubUrl)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
+	<-s.NextReady
 
-		next, err := getNext(c)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-
-		html, err := getHtmlFor(next)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-
-		imagesNext, err := appendImagesToBuf(html, s.ImageBuffers)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-
-		s.NextViewModel = &ImageViewModel{Images: imagesNext}
-
-		s.NextSubUrl = next
-		fmt.Println("Loaded next")
-	}(s)
+	go s.loadNext()
 
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+}
+
+func (s *Server) loadNext() {
+	c, err := getHtmlFor(s.CurrSubUrl)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	next, err := getNext(c)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	html, err := getHtmlFor(next)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	imagesNext, err := appendImagesToBuf(html, s.ImageBuffers)
+	//if err != nil && errors.Is(err, &NoMoreError{}) {
+	//	fmt.Println(err)
+	//	return
+	//} else
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	title, chapter, err := getTitleAndChapter(next)
+	if err != nil {
+		title = "Unknown"
+		chapter = "ch_?"
+	}
+
+	full := strings.Replace(title, "-", " ", -1) + " - " + strings.Replace(chapter, "_", " ", -1)
+
+	s.NextViewModel = &ImageViewModel{Images: imagesNext, Title: full}
+
+	s.NextSubUrl = next
+	fmt.Println("Loaded next")
+	s.NextReady <- true
+}
+
+func getTitleAndChapter(url string) (title string, chapter string, err error) {
+	reg, err := regexp.Compile(`/title/\d*-(.*?)/\d*-(.*)`)
+	if err != nil {
+		return "", "", err
+	}
+
+	matches := reg.FindAllStringSubmatch(url, -1)
+	if len(matches) <= 0 {
+		return "", "", errors.New("no title or chapter found")
+	}
+
+	return matches[0][1], matches[0][2], nil
+}
+
+func (s *Server) loadPrev() {
+	c, err := getHtmlFor(s.CurrSubUrl)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	prev, err := getPrev(c)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	html, err := getHtmlFor(prev)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	imagesNext, err := appendImagesToBuf(html, s.ImageBuffers)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	title, chapter, err := getTitleAndChapter(prev)
+	if err != nil {
+		title = "Unknown"
+		chapter = "ch_?"
+	}
+
+	full := strings.Replace(title, "-", " ", -1) + " - " + strings.Replace(chapter, "_", " ", -1)
+
+	s.PrevViewModel = &ImageViewModel{Images: imagesNext, Title: full}
+
+	s.PrevSubUrl = prev
+	fmt.Println("Loaded prev")
+	s.PrevReady <- true
 }
 
 func (s *Server) handlePrev(w http.ResponseWriter, r *http.Request) {
@@ -284,34 +321,9 @@ func (s *Server) handlePrev(w http.ResponseWriter, r *http.Request) {
 	s.NextSubUrl = s.CurrSubUrl
 	s.CurrSubUrl = s.PrevSubUrl
 
-	go func(s *Server) {
-		c, err := getHtmlFor(s.CurrSubUrl)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		prev, err := getPrev(c)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		html, err := getHtmlFor(prev)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
+	<-s.PrevReady
 
-		imagesNext, err := appendImagesToBuf(html, s.ImageBuffers)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-
-		s.PrevViewModel = &ImageViewModel{Images: imagesNext}
-
-		s.PrevSubUrl = prev
-		fmt.Println("Loaded prev")
-	}(s)
+	go s.loadPrev()
 
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 }
@@ -322,6 +334,44 @@ func (s *Server) HandleCurrent(w http.ResponseWriter, _ *http.Request) {
 	if err != nil {
 		fmt.Println(err)
 	}
+}
+
+func (s *Server) HandleNew(w http.ResponseWriter, r *http.Request) {
+	title := r.PathValue("title")
+	chapter := r.PathValue("chapter")
+
+	url := fmt.Sprintf("/title/%s/%s", title, chapter)
+
+	s.ImageBuffers = make(map[string]*bytes.Buffer)
+	s.CurrSubUrl = url
+	s.PrevSubUrl = ""
+	s.NextSubUrl = ""
+	s.loadCurr()
+
+	go s.loadNext()
+	go s.loadPrev()
+
+	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+}
+
+func (s *Server) loadCurr() {
+	html, err := getHtmlFor(s.CurrSubUrl)
+	if err != nil {
+		panic(err)
+	}
+
+	imagesCurr, err := appendImagesToBuf(html, s.ImageBuffers)
+
+	title, chapter, err := getTitleAndChapter(s.CurrSubUrl)
+	if err != nil {
+		title = "Unknown"
+		chapter = "ch_?"
+	}
+
+	full := strings.Replace(title, "-", " ", -1) + " - " + strings.Replace(chapter, "_", " ", -1)
+
+	s.CurrViewModel = &ImageViewModel{Images: imagesCurr, Title: full}
+	fmt.Println("Loaded current")
 }
 
 func addFileToRam(url string) (*bytes.Buffer, error) {

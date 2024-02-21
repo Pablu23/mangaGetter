@@ -317,7 +317,7 @@ func (s *Server) handlePrev(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) HandleCurrent(w http.ResponseWriter, _ *http.Request) {
-	tmpl := template.Must(template.ParseFiles("test.html"))
+	tmpl := template.Must(template.ParseFiles("test.gohtml"))
 	err := tmpl.Execute(w, s.CurrViewModel)
 	if err != nil {
 		fmt.Println(err)

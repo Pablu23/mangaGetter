@@ -37,19 +37,6 @@ func main() {
 		return
 	}
 
-	//var latestTimeStamp int64 = 0
-	//var latestUrl string
-	//for _, m := range db.Mangas {
-	//	if latestTimeStamp < m.LatestChapter.TimeStampUnix {
-	//		latestTimeStamp = m.LatestChapter.TimeStampUnix
-	//		latestUrl = m.LatestChapter.Url
-	//	}
-	//}
-	//
-	//if latestUrl == "" {
-	//	latestUrl = "/title/80381-i-stan-the-prince/1539086-ch_16"
-	//}
-
 	server := Server{
 		ImageBuffers: make(map[string]*bytes.Buffer),
 		NextReady:    make(chan bool),
@@ -67,10 +54,6 @@ func main() {
 			Close(&db)
 		}
 	}()
-
-	//server.LoadCurr()
-	//go server.LoadPrev()
-	//go server.LoadNext()
 
 	http.HandleFunc("/", server.HandleMenu)
 	http.HandleFunc("/new/title/{title}/{chapter}", server.HandleNew)

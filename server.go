@@ -188,7 +188,10 @@ func (s *Server) HandlePrev(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) HandleCurrent(w http.ResponseWriter, _ *http.Request) {
-	tmpl := template.Must(template.ParseFiles("test.gohtml"))
+	tmpl := template.Must(template.ParseFiles("viewer.gohtml"))
+
+	s.DbMgr.rw.Lock()
+	defer s.DbMgr.rw.Unlock()
 
 	mangaId, chapterId, err := getMangaIdAndChapterId(s.CurrSubUrl)
 	if err != nil {
@@ -310,6 +313,9 @@ func (s *Server) AppendImagesToBuf(html string) ([]Image, error) {
 
 func (s *Server) HandleMenu(w http.ResponseWriter, r *http.Request) {
 	tmpl := template.Must(template.ParseFiles("menu.gohtml"))
+
+	s.DbMgr.rw.Lock()
+	defer s.DbMgr.rw.Unlock()
 
 	all := s.DbMgr.Mangas
 	l := len(all)

@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	_ "embed"
+	"sync"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -28,16 +29,18 @@ type Chapter struct {
 type DatabaseManager struct {
 	ConnectionString string
 	db               *sql.DB
-	Mangas           map[int]*Manga
-	Chapters         map[int]*Chapter
+
+	rw       *sync.Mutex
+	Mangas   map[int]*Manga
+	Chapters map[int]*Chapter
 
 	CreateIfNotExists bool
 }
 
 func NewDatabase(connectionString string, createIfNotExists bool) DatabaseManager {
 	return DatabaseManager{
-		ConnectionString: connectionString,
-
+		ConnectionString:  connectionString,
+		rw:                &sync.Mutex{},
 		Mangas:            make(map[int]*Manga),
 		Chapters:          make(map[int]*Chapter),
 		CreateIfNotExists: createIfNotExists,
@@ -75,6 +78,8 @@ func (dbMgr *DatabaseManager) Close() error {
 func (dbMgr *DatabaseManager) Save() error {
 	db := dbMgr.db
 
+	dbMgr.rw.Lock()
+	defer dbMgr.rw.Unlock()
 	for _, m := range dbMgr.Mangas {
 		count := 0
 		err := db.QueryRow("SELECT COUNT(*) FROM Manga where ID = ?", m.Id).Scan(&count)
@@ -128,6 +133,10 @@ func (dbMgr *DatabaseManager) createDatabaseIfNotExists() error {
 
 func (dbMgr *DatabaseManager) load() error {
 	db := dbMgr.db
+
+	dbMgr.rw.Lock()
+	defer dbMgr.rw.Unlock()
+
 	rows, err := db.Query("SELECT * FROM Manga")
 	if err != nil {
 		return err

@@ -1,4 +1,4 @@
-package main
+package database
 
 import (
 	"database/sql"
@@ -30,7 +30,7 @@ type DatabaseManager struct {
 	ConnectionString string
 	db               *sql.DB
 
-	rw       *sync.Mutex
+	Rw       *sync.Mutex
 	Mangas   map[int]*Manga
 	Chapters map[int]*Chapter
 
@@ -40,7 +40,7 @@ type DatabaseManager struct {
 func NewDatabase(connectionString string, createIfNotExists bool) DatabaseManager {
 	return DatabaseManager{
 		ConnectionString:  connectionString,
-		rw:                &sync.Mutex{},
+		Rw:                &sync.Mutex{},
 		Mangas:            make(map[int]*Manga),
 		Chapters:          make(map[int]*Chapter),
 		CreateIfNotExists: createIfNotExists,
@@ -78,8 +78,8 @@ func (dbMgr *DatabaseManager) Close() error {
 func (dbMgr *DatabaseManager) Save() error {
 	db := dbMgr.db
 
-	dbMgr.rw.Lock()
-	defer dbMgr.rw.Unlock()
+	dbMgr.Rw.Lock()
+	defer dbMgr.Rw.Unlock()
 	for _, m := range dbMgr.Mangas {
 		count := 0
 		err := db.QueryRow("SELECT COUNT(*) FROM Manga where ID = ?", m.Id).Scan(&count)
@@ -134,8 +134,8 @@ func (dbMgr *DatabaseManager) createDatabaseIfNotExists() error {
 func (dbMgr *DatabaseManager) load() error {
 	db := dbMgr.db
 
-	dbMgr.rw.Lock()
-	defer dbMgr.rw.Unlock()
+	dbMgr.Rw.Lock()
+	defer dbMgr.Rw.Unlock()
 
 	rows, err := db.Query("SELECT * FROM Manga")
 	if err != nil {

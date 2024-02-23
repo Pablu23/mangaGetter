@@ -1,4 +1,4 @@
-package main
+package provider
 
 import (
 	"errors"
@@ -6,14 +6,8 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strconv"
 )
-
-type Provider interface {
-	GetImageList(html string) (imageUrls []string, err error)
-	GetHtml(url string) (html string, err error)
-	GetNext(html string) (url string, err error)
-	GetPrev(html string) (url string, err error)
-}
 
 type Bato struct{}
 
@@ -80,4 +74,37 @@ func (b *Bato) GetPrev(html string) (subUrl string, err error) {
 	match := reg.FindStringSubmatch(html)
 
 	return match[1], err
+}
+
+func (b *Bato) GetTitleAndChapter(url string) (title string, chapter string, err error) {
+	reg, err := regexp.Compile(`/title/\d*-(.*?)/\d*-(.*)`)
+	if err != nil {
+		return "", "", err
+	}
+
+	matches := reg.FindAllStringSubmatch(url, -1)
+	if len(matches) <= 0 {
+		return "", "", errors.New("no title or chapter found")
+	}
+
+	return matches[0][1], matches[0][2], nil
+}
+
+func (b *Bato) GetTitleIdAndChapterId(url string) (titleId int, chapterId int, err error) {
+	reg, err := regexp.Compile(`/title/(\d*)-.*?/(\d*)-.*`)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	matches := reg.FindAllStringSubmatch(url, -1)
+	if len(matches) <= 0 {
+		return 0, 0, errors.New("no title or chapter found")
+	}
+	t, err := strconv.Atoi(matches[0][1])
+	if err != nil {
+		return 0, 0, err
+	}
+	c, err := strconv.Atoi(matches[0][2])
+
+	return t, c, err
 }

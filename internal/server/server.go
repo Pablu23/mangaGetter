@@ -1,10 +1,14 @@
-package main
+package server
 
 import (
 	"bytes"
 	"fmt"
 	"golang.org/x/text/language"
 	"html/template"
+	"io"
+	"mangaGetter/internal/database"
+	"mangaGetter/internal/provider"
+	"mangaGetter/internal/view"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -16,9 +20,9 @@ import (
 )
 
 type Server struct {
-	PrevViewModel *ImageViewModel
-	CurrViewModel *ImageViewModel
-	NextViewModel *ImageViewModel
+	PrevViewModel *view.ImageViewModel
+	CurrViewModel *view.ImageViewModel
+	NextViewModel *view.ImageViewModel
 
 	ImageBuffers map[string]*bytes.Buffer
 	Mutex        *sync.Mutex
@@ -27,12 +31,12 @@ type Server struct {
 	CurrSubUrl string
 	PrevSubUrl string
 
-	Provider Provider
+	Provider provider.Provider
 
 	IsFirst bool
 	IsLast  bool
 
-	DbMgr *DatabaseManager
+	DbMgr *database.DatabaseManager
 
 	// I'm not even sure if this helps.
 	// If you press next and then prev too fast you still lock yourself out
@@ -62,7 +66,7 @@ func (s *Server) HandleNext(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Received Next")
 
 	if s.PrevViewModel != nil {
-		go func(viewModel ImageViewModel, s *Server) {
+		go func(viewModel view.ImageViewModel, s *Server) {
 			s.Mutex.Lock()
 			for _, img := range viewModel.Images {
 				delete(s.ImageBuffers, img.Path)
@@ -109,7 +113,7 @@ func (s *Server) LoadNext() {
 		return
 	}
 
-	title, chapter, err := getTitleAndChapter(next)
+	title, chapter, err := s.Provider.GetTitleAndChapter(next)
 	if err != nil {
 		title = "Unknown"
 		chapter = "ch_?"
@@ -117,7 +121,7 @@ func (s *Server) LoadNext() {
 
 	full := strings.Replace(title, "-", " ", -1) + " - " + strings.Replace(chapter, "_", " ", -1)
 
-	s.NextViewModel = &ImageViewModel{Images: imagesNext, Title: full}
+	s.NextViewModel = &view.ImageViewModel{Images: imagesNext, Title: full}
 
 	s.NextSubUrl = next
 	fmt.Println("Loaded next")
@@ -147,7 +151,7 @@ func (s *Server) LoadPrev() {
 		return
 	}
 
-	title, chapter, err := getTitleAndChapter(prev)
+	title, chapter, err := s.Provider.GetTitleAndChapter(prev)
 	if err != nil {
 		title = "Unknown"
 		chapter = "ch_?"
@@ -155,7 +159,7 @@ func (s *Server) LoadPrev() {
 
 	full := strings.Replace(title, "-", " ", -1) + " - " + strings.Replace(chapter, "_", " ", -1)
 
-	s.PrevViewModel = &ImageViewModel{Images: imagesNext, Title: full}
+	s.PrevViewModel = &view.ImageViewModel{Images: imagesNext, Title: full}
 
 	s.PrevSubUrl = prev
 	fmt.Println("Loaded prev")
@@ -165,7 +169,7 @@ func (s *Server) LoadPrev() {
 func (s *Server) HandlePrev(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Received Prev")
 	if s.NextViewModel != nil {
-		go func(viewModel ImageViewModel, s *Server) {
+		go func(viewModel view.ImageViewModel, s *Server) {
 			s.Mutex.Lock()
 			for _, img := range viewModel.Images {
 				delete(s.ImageBuffers, img.Path)
@@ -188,22 +192,22 @@ func (s *Server) HandlePrev(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) HandleCurrent(w http.ResponseWriter, _ *http.Request) {
-	tmpl := template.Must(template.ParseFiles("viewer.gohtml"))
+	tmpl := template.Must(view.GetViewTemplate(view.Viewer))
 
-	s.DbMgr.rw.Lock()
-	defer s.DbMgr.rw.Unlock()
+	s.DbMgr.Rw.Lock()
+	defer s.DbMgr.Rw.Unlock()
 
-	mangaId, chapterId, err := getMangaIdAndChapterId(s.CurrSubUrl)
+	mangaId, chapterId, err := s.Provider.GetTitleIdAndChapterId(s.CurrSubUrl)
 	if err != nil {
 		fmt.Println(err)
 	} else {
-		title, chapter, err := getTitleAndChapter(s.CurrSubUrl)
+		title, chapter, err := s.Provider.GetTitleAndChapter(s.CurrSubUrl)
 		if err != nil {
 			fmt.Println(err)
 		} else {
-			var manga *Manga
+			var manga *database.Manga
 			if s.DbMgr.Mangas[mangaId] == nil {
-				manga = &Manga{
+				manga = &database.Manga{
 					Id:            mangaId,
 					Title:         title,
 					TimeStampUnix: time.Now().Unix(),
@@ -222,7 +226,7 @@ func (s *Server) HandleCurrent(w http.ResponseWriter, _ *http.Request) {
 					number = 0
 				}
 
-				s.DbMgr.Chapters[chapterId] = &Chapter{
+				s.DbMgr.Chapters[chapterId] = &database.Chapter{
 					Id:            chapterId,
 					Manga:         manga,
 					Url:           s.CurrSubUrl,
@@ -270,7 +274,7 @@ func (s *Server) LoadCurr() {
 
 	imagesCurr, err := s.AppendImagesToBuf(html)
 
-	title, chapter, err := getTitleAndChapter(s.CurrSubUrl)
+	title, chapter, err := s.Provider.GetTitleAndChapter(s.CurrSubUrl)
 	if err != nil {
 		title = "Unknown"
 		chapter = "ch_?"
@@ -278,17 +282,17 @@ func (s *Server) LoadCurr() {
 
 	full := strings.Replace(title, "-", " ", -1) + " - " + strings.Replace(chapter, "_", " ", -1)
 
-	s.CurrViewModel = &ImageViewModel{Images: imagesCurr, Title: full}
+	s.CurrViewModel = &view.ImageViewModel{Images: imagesCurr, Title: full}
 	fmt.Println("Loaded current")
 }
 
-func (s *Server) AppendImagesToBuf(html string) ([]Image, error) {
+func (s *Server) AppendImagesToBuf(html string) ([]view.Image, error) {
 	imgList, err := s.Provider.GetImageList(html)
 	if err != nil {
 		return nil, err
 	}
 
-	images := make([]Image, len(imgList))
+	images := make([]view.Image, len(imgList))
 
 	wg := sync.WaitGroup{}
 	for i, url := range imgList {
@@ -302,7 +306,7 @@ func (s *Server) AppendImagesToBuf(html string) ([]Image, error) {
 			s.Mutex.Lock()
 			s.ImageBuffers[name] = buf
 			s.Mutex.Unlock()
-			images[i] = Image{Path: name, Index: i}
+			images[i] = view.Image{Path: name, Index: i}
 			wg.Done()
 		}(i, url, &wg)
 	}
@@ -311,21 +315,21 @@ func (s *Server) AppendImagesToBuf(html string) ([]Image, error) {
 	return images, nil
 }
 
-func (s *Server) HandleMenu(w http.ResponseWriter, r *http.Request) {
-	tmpl := template.Must(template.ParseFiles("menu.gohtml"))
+func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
+	tmpl := template.Must(view.GetViewTemplate(view.Menu))
 
-	s.DbMgr.rw.Lock()
-	defer s.DbMgr.rw.Unlock()
+	s.DbMgr.Rw.Lock()
+	defer s.DbMgr.Rw.Unlock()
 
 	all := s.DbMgr.Mangas
 	l := len(all)
-	mangaViewModels := make([]MangaViewModel, l)
+	mangaViewModels := make([]view.MangaViewModel, l)
 	counter := 0
 
 	for _, manga := range all {
 		title := cases.Title(language.English, cases.Compact).String(strings.Replace(manga.Title, "-", " ", -1))
 
-		mangaViewModels[counter] = MangaViewModel{
+		mangaViewModels[counter] = view.MangaViewModel{
 			Title:  title,
 			Number: manga.LatestChapter.Number,
 			// I Hate this time Format... 15 = hh, 04 = mm, 02 = DD, 01 = MM, 06 == YY
@@ -335,7 +339,7 @@ func (s *Server) HandleMenu(w http.ResponseWriter, r *http.Request) {
 		counter++
 	}
 
-	menuViewModel := MenuViewModel{
+	menuViewModel := view.MenuViewModel{
 		Mangas: mangaViewModels,
 	}
 
@@ -353,4 +357,24 @@ func (s *Server) HandleExit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+}
+
+func addFileToRam(url string) (*bytes.Buffer, error) {
+	// Get the data
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			fmt.Println(err)
+		}
+	}(resp.Body)
+
+	buf := new(bytes.Buffer)
+
+	// Write the body to file
+	_, err = io.Copy(buf, resp.Body)
+	return buf, err
 }

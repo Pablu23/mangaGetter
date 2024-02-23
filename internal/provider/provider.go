@@ -7,4 +7,5 @@ type Provider interface {
 	GetPrev(html string) (url string, err error)
 	GetTitleAndChapter(url string) (title string, chapter string, err error)
 	GetTitleIdAndChapterId(url string) (titleId int, chapterId int, err error)
+	GetThumbnail(mangaId string) (thumbnailUrl string, err error)
 }

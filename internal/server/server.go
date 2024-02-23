@@ -9,6 +9,7 @@ import (
 	"mangaGetter/internal/view"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -30,7 +31,7 @@ type Server struct {
 	IsFirst bool
 	IsLast  bool
 
-	DbMgr *database.DatabaseManager
+	DbMgr *database.Manager
 
 	// I'm not even sure if this helps.
 	// If you press next and then prev too fast you still lock yourself out
@@ -134,6 +135,27 @@ func (s *Server) LoadCurr() {
 
 	s.CurrViewModel = &view.ImageViewModel{Images: imagesCurr, Title: full}
 	fmt.Println("Loaded current")
+}
+
+func (s *Server) LoadThumbnail(mangaId int) (path string, err error) {
+	strId := strconv.Itoa(mangaId)
+
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+	if s.ImageBuffers[strId] != nil {
+		return strId, nil
+	}
+
+	url, err := s.Provider.GetThumbnail(strconv.Itoa(mangaId))
+	if err != nil {
+		return "", err
+	}
+	ram, err := addFileToRam(url)
+	if err != nil {
+		return "", err
+	}
+	s.ImageBuffers[strId] = ram
+	return strId, nil
 }
 
 func (s *Server) AppendImagesToBuf(html string) ([]view.Image, error) {

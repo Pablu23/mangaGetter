@@ -108,3 +108,40 @@ func (b *Bato) GetTitleIdAndChapterId(url string) (titleId int, chapterId int, e
 
 	return t, c, err
 }
+
+//func (b *Bato) GetChapterList(url string) (chapterIds []int, err error) {
+//
+//}
+
+func (b *Bato) GetThumbnail(subUrl string) (thumbnailUrl string, err error) {
+	url := fmt.Sprintf("https://bato.to/title/%s", subUrl)
+	resp, err := http.Get(url)
+
+	// TODO: Testing for above 300 is dirty
+	if err != nil && resp.StatusCode > 300 {
+		return "", errors.New("could not get html")
+	}
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			fmt.Printf("Could not close body because: %v\n", err)
+		}
+	}(resp.Body)
+
+	all, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	h := string(all)
+
+	reg, err := regexp.Compile(`<img data-hk="0-1-0" .*? src="(.*?)["']`)
+	if err != nil {
+		return "", err
+	}
+	match := reg.FindStringSubmatch(h)
+	if len(match) <= 1 {
+		return "", errors.New("could not find Thumbnail url")
+	}
+
+	return match[1], nil
+}

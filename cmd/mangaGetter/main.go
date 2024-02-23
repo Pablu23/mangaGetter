@@ -46,6 +46,7 @@ func main() {
 	http.HandleFunc("POST /next", s.HandleNext)
 	http.HandleFunc("POST /prev", s.HandlePrev)
 	http.HandleFunc("POST /exit", s.HandleExit)
+	http.HandleFunc("POST /delete", s.HandleDelete)
 
 	fmt.Println("Server starting...")
 	err = http.ListenAndServe(":8000", nil)
@@ -55,7 +56,7 @@ func main() {
 	}
 }
 
-func Close(db *database.DatabaseManager) {
+func Close(db *database.Manager) {
 	fmt.Println("Attempting to save and close DB")
 	err := db.Save()
 	if err != nil {

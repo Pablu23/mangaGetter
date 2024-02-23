@@ -11,10 +11,12 @@ type ImageViewModel struct {
 }
 
 type MangaViewModel struct {
-	Title    string
-	Number   int
-	LastTime string
-	Url      string
+	ID           int
+	Title        string
+	Number       int
+	LastTime     string
+	Url          string
+	ThumbnailUrl string
 }
 
 type MenuViewModel struct {

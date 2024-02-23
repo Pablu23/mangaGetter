@@ -1,7 +1,8 @@
 create table if not exists Manga (
     ID integer not null primary key,
     Title text,
-    TimeStampUnixEpoch int
+    TimeStampUnixEpoch int,
+    Thumbnail blob
 );
 
 create table if not exists Chapter (

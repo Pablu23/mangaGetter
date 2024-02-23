@@ -39,8 +39,12 @@ func (s *Server) HandleNew(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 	tmpl := template.Must(view.GetViewTemplate(view.Menu))
 
+	fmt.Println("Locking Rw in handler.go:43")
 	s.DbMgr.Rw.Lock()
-	defer s.DbMgr.Rw.Unlock()
+	defer func() {
+		fmt.Println("Unlocking Rw in handler.go:46")
+		s.DbMgr.Rw.Unlock()
+	}()
 
 	all := s.DbMgr.Mangas
 	l := len(all)
@@ -50,12 +54,20 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 	for _, manga := range all {
 		title := cases.Title(language.English, cases.Compact).String(strings.Replace(manga.Title, "-", " ", -1))
 
+		thumbnail, err := s.LoadThumbnail(manga.Id)
+		if err != nil {
+			continue
+		}
+		manga.Thumbnail = s.ImageBuffers[thumbnail]
+
 		mangaViewModels[counter] = view.MangaViewModel{
+			ID:     manga.Id,
 			Title:  title,
 			Number: manga.LatestChapter.Number,
 			// I Hate this time Format... 15 = hh, 04 = mm, 02 = DD, 01 = MM, 06 == YY
-			LastTime: time.Unix(manga.TimeStampUnix, 0).Format("15:04 (02-01-06)"),
-			Url:      manga.LatestChapter.Url,
+			LastTime:     time.Unix(manga.TimeStampUnix, 0).Format("15:04 (02-01-06)"),
+			Url:          manga.LatestChapter.Url,
+			ThumbnailUrl: thumbnail,
 		}
 		counter++
 	}
@@ -74,6 +86,29 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
+func (s *Server) HandleDelete(w http.ResponseWriter, r *http.Request) {
+	mangaStr := r.PostFormValue("mangaId")
+
+	if mangaStr == "" {
+		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+		return
+	}
+
+	mangaId, err := strconv.Atoi(mangaStr)
+	if err != nil {
+		fmt.Println(err)
+		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+		return
+	}
+
+	err = s.DbMgr.Delete(mangaId)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+}
+
 func (s *Server) HandleExit(w http.ResponseWriter, r *http.Request) {
 	err := s.DbMgr.Save()
 	if err != nil {
@@ -87,8 +122,12 @@ func (s *Server) HandleExit(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleCurrent(w http.ResponseWriter, _ *http.Request) {
 	tmpl := template.Must(view.GetViewTemplate(view.Viewer))
 
+	fmt.Println("Locking Rw in handler.go:125")
 	s.DbMgr.Rw.Lock()
-	defer s.DbMgr.Rw.Unlock()
+	defer func() {
+		fmt.Println("Unlocking Rw in handler.go:128")
+		s.DbMgr.Rw.Unlock()
+	}()
 
 	mangaId, chapterId, err := s.Provider.GetTitleIdAndChapterId(s.CurrSubUrl)
 	if err != nil {
@@ -144,6 +183,7 @@ func (s *Server) HandleCurrent(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) HandleImage(w http.ResponseWriter, r *http.Request) {
 	u := r.PathValue("url")
 	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
 	buf := s.ImageBuffers[u]
 	if buf == nil {
 		fmt.Printf("url: %s is nil\n", u)
@@ -156,7 +196,6 @@ func (s *Server) HandleImage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fmt.Println(err)
 	}
-	s.Mutex.Unlock()
 }
 
 func (s *Server) HandleNext(w http.ResponseWriter, r *http.Request) {

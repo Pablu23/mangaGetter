@@ -1,0 +1,229 @@
+package server
+
+import (
+	"bytes"
+	"cmp"
+	"fmt"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+	"html/template"
+	"mangaGetter/internal/database"
+	"mangaGetter/internal/view"
+	"net/http"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+)
+
+func (s *Server) HandleNew(w http.ResponseWriter, r *http.Request) {
+	title := r.PathValue("title")
+	chapter := r.PathValue("chapter")
+
+	url := fmt.Sprintf("/title/%s/%s", title, chapter)
+
+	s.Mutex.Lock()
+	s.ImageBuffers = make(map[string]*bytes.Buffer)
+	s.Mutex.Unlock()
+	s.CurrSubUrl = url
+	s.PrevSubUrl = ""
+	s.NextSubUrl = ""
+	s.LoadCurr()
+
+	go s.LoadNext()
+	go s.LoadPrev()
+
+	http.Redirect(w, r, "/current/", http.StatusTemporaryRedirect)
+}
+
+func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
+	tmpl := template.Must(view.GetViewTemplate(view.Menu))
+
+	s.DbMgr.Rw.Lock()
+	defer s.DbMgr.Rw.Unlock()
+
+	all := s.DbMgr.Mangas
+	l := len(all)
+	mangaViewModels := make([]view.MangaViewModel, l)
+	counter := 0
+
+	for _, manga := range all {
+		title := cases.Title(language.English, cases.Compact).String(strings.Replace(manga.Title, "-", " ", -1))
+
+		mangaViewModels[counter] = view.MangaViewModel{
+			Title:  title,
+			Number: manga.LatestChapter.Number,
+			// I Hate this time Format... 15 = hh, 04 = mm, 02 = DD, 01 = MM, 06 == YY
+			LastTime: time.Unix(manga.TimeStampUnix, 0).Format("15:04 (02-01-06)"),
+			Url:      manga.LatestChapter.Url,
+		}
+		counter++
+	}
+
+	slices.SortStableFunc(mangaViewModels, func(a, b view.MangaViewModel) int {
+		return cmp.Compare(a.Title, b.Title)
+	})
+
+	menuViewModel := view.MenuViewModel{
+		Mangas: mangaViewModels,
+	}
+
+	err := tmpl.Execute(w, menuViewModel)
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+func (s *Server) HandleExit(w http.ResponseWriter, r *http.Request) {
+	err := s.DbMgr.Save()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+}
+
+func (s *Server) HandleCurrent(w http.ResponseWriter, _ *http.Request) {
+	tmpl := template.Must(view.GetViewTemplate(view.Viewer))
+
+	s.DbMgr.Rw.Lock()
+	defer s.DbMgr.Rw.Unlock()
+
+	mangaId, chapterId, err := s.Provider.GetTitleIdAndChapterId(s.CurrSubUrl)
+	if err != nil {
+		fmt.Println(err)
+	} else {
+		title, chapter, err := s.Provider.GetTitleAndChapter(s.CurrSubUrl)
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			var manga *database.Manga
+			if s.DbMgr.Mangas[mangaId] == nil {
+				manga = &database.Manga{
+					Id:            mangaId,
+					Title:         title,
+					TimeStampUnix: time.Now().Unix(),
+				}
+				s.DbMgr.Mangas[mangaId] = manga
+			} else {
+				manga = s.DbMgr.Mangas[mangaId]
+				s.DbMgr.Mangas[mangaId].TimeStampUnix = time.Now().Unix()
+			}
+
+			if s.DbMgr.Chapters[chapterId] == nil {
+				chapterNumberStr := strings.Replace(chapter, "ch_", "", 1)
+				number, err := strconv.Atoi(chapterNumberStr)
+				if err != nil {
+					fmt.Println(err)
+					number = 0
+				}
+
+				s.DbMgr.Chapters[chapterId] = &database.Chapter{
+					Id:            chapterId,
+					Manga:         manga,
+					Url:           s.CurrSubUrl,
+					Name:          chapter,
+					Number:        number,
+					TimeStampUnix: time.Now().Unix(),
+				}
+			} else {
+				s.DbMgr.Chapters[chapterId].TimeStampUnix = time.Now().Unix()
+			}
+
+			s.DbMgr.Mangas[mangaId].LatestChapter = s.DbMgr.Chapters[chapterId]
+		}
+	}
+
+	err = tmpl.Execute(w, s.CurrViewModel)
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+func (s *Server) HandleImage(w http.ResponseWriter, r *http.Request) {
+	u := r.PathValue("url")
+	s.Mutex.Lock()
+	buf := s.ImageBuffers[u]
+	if buf == nil {
+		fmt.Printf("url: %s is nil\n", u)
+		w.WriteHeader(400)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/webp")
+	_, err := w.Write(buf.Bytes())
+	if err != nil {
+		fmt.Println(err)
+	}
+	s.Mutex.Unlock()
+}
+
+func (s *Server) HandleNext(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Received Next")
+
+	if s.PrevViewModel != nil {
+		go func(viewModel view.ImageViewModel, s *Server) {
+			s.Mutex.Lock()
+			for _, img := range viewModel.Images {
+				delete(s.ImageBuffers, img.Path)
+			}
+			s.Mutex.Unlock()
+			fmt.Println("Cleaned out of scope Last")
+		}(*s.PrevViewModel, s)
+	}
+
+	s.PrevViewModel = s.CurrViewModel
+	s.CurrViewModel = s.NextViewModel
+	s.PrevSubUrl = s.CurrSubUrl
+	s.CurrSubUrl = s.NextSubUrl
+
+	<-s.NextReady
+
+	go s.LoadNext()
+
+	http.Redirect(w, r, "/current/", http.StatusTemporaryRedirect)
+}
+func (s *Server) HandlePrev(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Received Prev")
+	if s.NextViewModel != nil {
+		go func(viewModel view.ImageViewModel, s *Server) {
+			s.Mutex.Lock()
+			for _, img := range viewModel.Images {
+				delete(s.ImageBuffers, img.Path)
+			}
+			s.Mutex.Unlock()
+			fmt.Println("Cleaned out of scope Last")
+		}(*s.NextViewModel, s)
+	}
+
+	s.NextViewModel = s.CurrViewModel
+	s.CurrViewModel = s.PrevViewModel
+	s.NextSubUrl = s.CurrSubUrl
+	s.CurrSubUrl = s.PrevSubUrl
+
+	<-s.PrevReady
+
+	go s.LoadPrev()
+
+	http.Redirect(w, r, "/current/", http.StatusTemporaryRedirect)
+}
+
+func (s *Server) HandleNewQuery(w http.ResponseWriter, r *http.Request) {
+	sub := r.PostFormValue("subUrl")
+
+	url := fmt.Sprintf("/title/%s", sub)
+
+	s.Mutex.Lock()
+	s.ImageBuffers = make(map[string]*bytes.Buffer)
+	s.Mutex.Unlock()
+	s.CurrSubUrl = url
+	s.PrevSubUrl = ""
+	s.NextSubUrl = ""
+	s.LoadCurr()
+
+	go s.LoadNext()
+	go s.LoadPrev()
+
+	http.Redirect(w, r, "/current/", http.StatusTemporaryRedirect)
+}

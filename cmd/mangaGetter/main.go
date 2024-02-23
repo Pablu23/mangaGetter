@@ -39,6 +39,7 @@ func main() {
 	}()
 
 	http.HandleFunc("/", s.HandleMenu)
+	http.HandleFunc("/new/", s.HandleNewQuery)
 	http.HandleFunc("/new/title/{title}/{chapter}", s.HandleNew)
 	http.HandleFunc("/current/", s.HandleCurrent)
 	http.HandleFunc("/img/{url}/", s.HandleImage)

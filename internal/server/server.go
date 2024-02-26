@@ -43,8 +43,6 @@ func New(provider provider.Provider, db *database.Manager) *Server {
 		Mutex:        &sync.Mutex{},
 	}
 
-	s.AddIco()
-
 	return &s
 }
 
@@ -207,16 +205,6 @@ func (s *Server) AppendImagesToBuf(html string) ([]view.Image, error) {
 
 	wg.Wait()
 	return images, nil
-}
-
-//go:embed favicon.ico
-var ico []byte
-
-func (s *Server) AddIco() {
-	buf := bytes.NewBuffer(ico)
-	s.Mutex.Lock()
-	s.ImageBuffers["favicon.ico"] = buf
-	s.Mutex.Unlock()
 }
 
 func addFileToRam(url string) (*bytes.Buffer, error) {

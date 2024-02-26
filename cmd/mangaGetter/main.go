@@ -72,6 +72,7 @@ func main() {
 	http.HandleFunc("POST /prev", s.HandlePrev)
 	http.HandleFunc("POST /exit", s.HandleExit)
 	http.HandleFunc("POST /delete", s.HandleDelete)
+	http.HandleFunc("/favicon.ico", s.HandleFavicon)
 
 	go func() {
 		time.Sleep(300 * time.Millisecond)

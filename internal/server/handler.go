@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"cmp"
+	_ "embed"
 	"fmt"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -193,6 +194,17 @@ func (s *Server) HandleImage(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "image/webp")
 	_, err := w.Write(buf.Bytes())
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+//go:embed favicon.ico
+var ico []byte
+
+func (s *Server) HandleFavicon(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "image/webp")
+	_, err := w.Write(ico)
 	if err != nil {
 		fmt.Println(err)
 	}

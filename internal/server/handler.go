@@ -212,12 +212,19 @@ func (s *Server) HandleNext(w http.ResponseWriter, r *http.Request) {
 		}(*s.PrevViewModel, s)
 	}
 
+	if s.NextViewModel == nil || s.NextSubUrl == "" {
+		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+		err := s.DbMgr.Save()
+		if err != nil {
+			fmt.Println(err)
+		}
+		return
+	}
+
 	s.PrevViewModel = s.CurrViewModel
 	s.CurrViewModel = s.NextViewModel
 	s.PrevSubUrl = s.CurrSubUrl
 	s.CurrSubUrl = s.NextSubUrl
-
-	<-s.NextReady
 
 	go s.LoadNext()
 
@@ -236,12 +243,19 @@ func (s *Server) HandlePrev(w http.ResponseWriter, r *http.Request) {
 		}(*s.NextViewModel, s)
 	}
 
+	if s.PrevViewModel == nil || s.PrevSubUrl == "" {
+		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+		err := s.DbMgr.Save()
+		if err != nil {
+			fmt.Println(err)
+		}
+		return
+	}
+
 	s.NextViewModel = s.CurrViewModel
 	s.CurrViewModel = s.PrevViewModel
 	s.NextSubUrl = s.CurrSubUrl
 	s.CurrSubUrl = s.PrevSubUrl
-
-	<-s.PrevReady
 
 	go s.LoadPrev()
 

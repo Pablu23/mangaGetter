@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	_ "embed"
 	"fmt"
 	"io"
 	"mangaGetter/internal/database"
@@ -32,35 +33,51 @@ type Server struct {
 	IsLast  bool
 
 	DbMgr *database.Manager
+}
 
-	// I'm not even sure if this helps.
-	// If you press next and then prev too fast you still lock yourself out
-	NextReady chan bool
-	PrevReady chan bool
+func New(provider provider.Provider, db *database.Manager) *Server {
+	s := Server{
+		ImageBuffers: make(map[string]*bytes.Buffer),
+		Provider:     provider,
+		DbMgr:        db,
+		Mutex:        &sync.Mutex{},
+	}
+
+	s.AddIco()
+
+	return &s
 }
 
 func (s *Server) LoadNext() {
 	c, err := s.Provider.GetHtml(s.CurrSubUrl)
 	if err != nil {
 		fmt.Println(err)
+		s.NextSubUrl = ""
+		s.NextViewModel = nil
 		return
 	}
 
 	next, err := s.Provider.GetNext(c)
 	if err != nil {
 		fmt.Println(err)
+		s.NextSubUrl = ""
+		s.NextViewModel = nil
 		return
 	}
 
 	html, err := s.Provider.GetHtml(next)
 	if err != nil {
 		fmt.Println(err)
+		s.NextSubUrl = ""
+		s.NextViewModel = nil
 		return
 	}
 
 	imagesNext, err := s.AppendImagesToBuf(html)
 	if err != nil {
 		fmt.Println(err)
+		s.NextSubUrl = ""
+		s.NextViewModel = nil
 		return
 	}
 
@@ -73,32 +90,38 @@ func (s *Server) LoadNext() {
 	full := strings.Replace(title, "-", " ", -1) + " - " + strings.Replace(chapter, "_", " ", -1)
 
 	s.NextViewModel = &view.ImageViewModel{Images: imagesNext, Title: full}
-
 	s.NextSubUrl = next
 	fmt.Println("Loaded next")
-	s.NextReady <- true
 }
 
 func (s *Server) LoadPrev() {
 	c, err := s.Provider.GetHtml(s.CurrSubUrl)
 	if err != nil {
 		fmt.Println(err)
+		s.PrevSubUrl = ""
+		s.PrevViewModel = nil
 		return
 	}
 	prev, err := s.Provider.GetPrev(c)
 	if err != nil {
 		fmt.Println(err)
+		s.PrevSubUrl = ""
+		s.PrevViewModel = nil
 		return
 	}
 	html, err := s.Provider.GetHtml(prev)
 	if err != nil {
 		fmt.Println(err)
+		s.PrevSubUrl = ""
+		s.PrevViewModel = nil
 		return
 	}
 
 	imagesNext, err := s.AppendImagesToBuf(html)
 	if err != nil {
 		fmt.Println(err)
+		s.PrevSubUrl = ""
+		s.PrevViewModel = nil
 		return
 	}
 
@@ -114,7 +137,6 @@ func (s *Server) LoadPrev() {
 
 	s.PrevSubUrl = prev
 	fmt.Println("Loaded prev")
-	s.PrevReady <- true
 }
 
 func (s *Server) LoadCurr() {
@@ -185,6 +207,16 @@ func (s *Server) AppendImagesToBuf(html string) ([]view.Image, error) {
 
 	wg.Wait()
 	return images, nil
+}
+
+//go:embed favicon.ico
+var ico []byte
+
+func (s *Server) AddIco() {
+	buf := bytes.NewBuffer(ico)
+	s.Mutex.Lock()
+	s.ImageBuffers["favicon.ico"] = buf
+	s.Mutex.Unlock()
 }
 
 func addFileToRam(url string) (*bytes.Buffer, error) {

@@ -190,9 +190,11 @@ func (dbMgr *Manager) load() error {
 
 	for rows.Next() {
 		manga := Manga{}
-		if err = rows.Scan(&manga.Id, &manga.Title, &manga.TimeStampUnix, &manga.Thumbnail); err != nil {
+		var thumbnail []byte
+		if err = rows.Scan(&manga.Id, &manga.Title, &manga.TimeStampUnix, &thumbnail); err != nil {
 			return err
 		}
+		manga.Thumbnail = bytes.NewBuffer(thumbnail)
 		dbMgr.Mangas[manga.Id] = &manga
 	}
 

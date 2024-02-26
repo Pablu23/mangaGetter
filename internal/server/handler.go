@@ -17,26 +17,6 @@ import (
 	"time"
 )
 
-func (s *Server) HandleNew(w http.ResponseWriter, r *http.Request) {
-	title := r.PathValue("title")
-	chapter := r.PathValue("chapter")
-
-	url := fmt.Sprintf("/title/%s/%s", title, chapter)
-
-	s.Mutex.Lock()
-	s.ImageBuffers = make(map[string]*bytes.Buffer)
-	s.Mutex.Unlock()
-	s.CurrSubUrl = url
-	s.PrevSubUrl = ""
-	s.NextSubUrl = ""
-	s.LoadCurr()
-
-	go s.LoadNext()
-	go s.LoadPrev()
-
-	http.Redirect(w, r, "/current/", http.StatusTemporaryRedirect)
-}
-
 func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 	tmpl := template.Must(view.GetViewTemplate(view.Menu))
 
@@ -276,8 +256,6 @@ func (s *Server) HandlePrev(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) HandleNewQuery(w http.ResponseWriter, r *http.Request) {
 	sub := r.PostFormValue("subUrl")
-
-	url := fmt.Sprintf("/title/%s", sub)
 
 	s.Mutex.Lock()
 	s.ImageBuffers = make(map[string]*bytes.Buffer)

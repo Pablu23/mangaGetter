@@ -3,56 +3,55 @@ package main
 import (
 	"fmt"
 	"mangaGetter/internal/database"
-	"mangaGetter/internal/provider"
 	"mangaGetter/internal/server"
 	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"runtime"
 	"time"
 )
 
 func main() {
-	dir, err := os.UserCacheDir()
-	if err != nil {
-		fmt.Println(nil)
-		return
-	}
+	//dir, err := os.UserCacheDir()
+	//if err != nil {
+	//	fmt.Println(nil)
+	//	return
+	//}
 
-	dirPath := filepath.Join(dir, "MangaGetter")
-	filePath := filepath.Join(dirPath, "db.sqlite")
+	//
+	//dirPath := filepath.Join(dir, "MangaGetter")
+	//filePath := filepath.Join(dirPath, "db.sqlite")
+	//
+	//if _, err := os.Stat(dirPath); os.IsNotExist(err) {
+	//	err = os.Mkdir(dirPath, os.ModePerm)
+	//	if err != nil {
+	//		fmt.Println(err)
+	//		return
+	//	}
+	//}
+	//
+	//if _, err := os.Stat(filePath); os.IsNotExist(err) {
+	//	f, err := os.Create(filePath)
+	//	if err != nil {
+	//		fmt.Println(err)
+	//		return
+	//	}
+	//	err = f.Close()
+	//	if err != nil {
+	//		fmt.Println(err)
+	//		return
+	//	}
+	//}
 
-	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
-		err = os.Mkdir(dirPath, os.ModePerm)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-	}
-
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		f, err := os.Create(filePath)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		err = f.Close()
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-	}
-
-	db := database.NewDatabase(filePath, true)
-	err = db.Open()
+	db := database.NewDatabase("db.sqlite", true)
+	err := db.Open()
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	s := server.New(&provider.Bato{}, &db)
+	s := server.New(&db)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
@@ -64,8 +63,7 @@ func main() {
 	}()
 
 	http.HandleFunc("/", s.HandleMenu)
-	http.HandleFunc("/new/", s.HandleNewQuery)
-	http.HandleFunc("/new/title/{title}/{chapter}", s.HandleNew)
+	http.HandleFunc("POST /new/", s.HandleNewQuery)
 	http.HandleFunc("/current/", s.HandleCurrent)
 	http.HandleFunc("/img/{url}/", s.HandleImage)
 	http.HandleFunc("POST /next", s.HandleNext)

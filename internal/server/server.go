@@ -4,18 +4,18 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
+	"github.com/google/uuid"
 	"io"
 	"mangaGetter/internal/database"
-	"mangaGetter/internal/provider"
 	"mangaGetter/internal/view"
 	"net/http"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 )
 
 type Server struct {
+	ContextManga  *database.Manga
 	PrevViewModel *view.ImageViewModel
 	CurrViewModel *view.ImageViewModel
 	NextViewModel *view.ImageViewModel
@@ -27,18 +27,15 @@ type Server struct {
 	CurrSubUrl string
 	PrevSubUrl string
 
-	Provider provider.Provider
-
 	IsFirst bool
 	IsLast  bool
 
 	DbMgr *database.Manager
 }
 
-func New(provider provider.Provider, db *database.Manager) *Server {
+func New(db *database.Manager) *Server {
 	s := Server{
 		ImageBuffers: make(map[string]*bytes.Buffer),
-		Provider:     provider,
 		DbMgr:        db,
 		Mutex:        &sync.Mutex{},
 	}
@@ -47,7 +44,7 @@ func New(provider provider.Provider, db *database.Manager) *Server {
 }
 
 func (s *Server) LoadNext() {
-	c, err := s.Provider.GetHtml(s.CurrSubUrl)
+	c, err := s.ContextManga.Provider.GetHtml(s.CurrSubUrl)
 	if err != nil {
 		fmt.Println(err)
 		s.NextSubUrl = ""
@@ -55,7 +52,7 @@ func (s *Server) LoadNext() {
 		return
 	}
 
-	next, err := s.Provider.GetNext(c)
+	next, err := s.ContextManga.Provider.GetNext(c)
 	if err != nil {
 		fmt.Println(err)
 		s.NextSubUrl = ""
@@ -63,7 +60,7 @@ func (s *Server) LoadNext() {
 		return
 	}
 
-	html, err := s.Provider.GetHtml(next)
+	html, err := s.ContextManga.Provider.GetHtml(next)
 	if err != nil {
 		fmt.Println(err)
 		s.NextSubUrl = ""
@@ -79,7 +76,7 @@ func (s *Server) LoadNext() {
 		return
 	}
 
-	title, chapter, err := s.Provider.GetTitleAndChapter(next)
+	title, chapter, err := s.ContextManga.Provider.GetTitleAndChapter(next)
 	if err != nil {
 		title = "Unknown"
 		chapter = "ch_?"
@@ -93,21 +90,21 @@ func (s *Server) LoadNext() {
 }
 
 func (s *Server) LoadPrev() {
-	c, err := s.Provider.GetHtml(s.CurrSubUrl)
+	c, err := s.ContextManga.Provider.GetHtml(s.CurrSubUrl)
 	if err != nil {
 		fmt.Println(err)
 		s.PrevSubUrl = ""
 		s.PrevViewModel = nil
 		return
 	}
-	prev, err := s.Provider.GetPrev(c)
+	prev, err := s.ContextManga.Provider.GetPrev(c)
 	if err != nil {
 		fmt.Println(err)
 		s.PrevSubUrl = ""
 		s.PrevViewModel = nil
 		return
 	}
-	html, err := s.Provider.GetHtml(prev)
+	html, err := s.ContextManga.Provider.GetHtml(prev)
 	if err != nil {
 		fmt.Println(err)
 		s.PrevSubUrl = ""
@@ -123,7 +120,7 @@ func (s *Server) LoadPrev() {
 		return
 	}
 
-	title, chapter, err := s.Provider.GetTitleAndChapter(prev)
+	title, chapter, err := s.ContextManga.Provider.GetTitleAndChapter(prev)
 	if err != nil {
 		title = "Unknown"
 		chapter = "ch_?"
@@ -138,14 +135,14 @@ func (s *Server) LoadPrev() {
 }
 
 func (s *Server) LoadCurr() {
-	html, err := s.Provider.GetHtml(s.CurrSubUrl)
+	html, err := s.ContextManga.Provider.GetHtml(s.CurrSubUrl)
 	if err != nil {
 		panic(err)
 	}
 
 	imagesCurr, err := s.AppendImagesToBuf(html)
 
-	title, chapter, err := s.Provider.GetTitleAndChapter(s.CurrSubUrl)
+	title, chapter, err := s.ContextManga.Provider.GetTitleAndChapter(s.CurrSubUrl)
 	if err != nil {
 		title = "Unknown"
 		chapter = "ch_?"
@@ -166,7 +163,7 @@ func (s *Server) LoadThumbnail(mangaId int) (path string, err error) {
 		return strId, nil
 	}
 
-	url, err := s.Provider.GetThumbnail(strconv.Itoa(mangaId))
+	url, err := s.ContextManga.Provider.GetThumbnail(strconv.Itoa(mangaId))
 	if err != nil {
 		return "", err
 	}
@@ -179,7 +176,7 @@ func (s *Server) LoadThumbnail(mangaId int) (path string, err error) {
 }
 
 func (s *Server) AppendImagesToBuf(html string) ([]view.Image, error) {
-	imgList, err := s.Provider.GetImageList(html)
+	imgList, err := s.ContextManga.Provider.GetImageList(html)
 	if err != nil {
 		return nil, err
 	}
@@ -194,11 +191,11 @@ func (s *Server) AppendImagesToBuf(html string) ([]view.Image, error) {
 			if err != nil {
 				panic(err)
 			}
-			name := filepath.Base(url)
+			g := uuid.New()
 			s.Mutex.Lock()
-			s.ImageBuffers[name] = buf
+			s.ImageBuffers[g.String()] = buf
 			s.Mutex.Unlock()
-			images[i] = view.Image{Path: name, Index: i}
+			images[i] = view.Image{Path: g.String(), Index: i}
 			wg.Done()
 		}(i, url, &wg)
 	}

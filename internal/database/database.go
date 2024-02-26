@@ -5,29 +5,11 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
+	"mangaGetter/internal/provider"
 	"sync"
 
 	_ "github.com/mattn/go-sqlite3"
 )
-
-type Manga struct {
-	Id            int
-	Title         string
-	TimeStampUnix int64
-	Thumbnail     *bytes.Buffer
-
-	// Not in DB
-	LatestChapter *Chapter
-}
-
-type Chapter struct {
-	Id            int
-	Manga         *Manga
-	Url           string
-	Name          string
-	Number        int
-	TimeStampUnix int64
-}
 
 type Manager struct {
 	ConnectionString string
@@ -183,7 +165,7 @@ func (dbMgr *Manager) load() error {
 		dbMgr.Rw.Unlock()
 	}()
 
-	rows, err := db.Query("SELECT * FROM Manga")
+	rows, err := db.Query("SELECT ID, Provider, Title, TimeStampUnixEpoch, Thumbnail, Rating FROM Manga")
 	if err != nil {
 		return err
 	}
@@ -191,14 +173,16 @@ func (dbMgr *Manager) load() error {
 	for rows.Next() {
 		manga := Manga{}
 		var thumbnail []byte
-		if err = rows.Scan(&manga.Id, &manga.Title, &manga.TimeStampUnix, &thumbnail); err != nil {
+		var providerId int
+		if err = rows.Scan(&manga.Id, &providerId, &manga.Title, &manga.TimeStampUnix, &thumbnail, &manga.Rating); err != nil {
 			return err
 		}
 		manga.Thumbnail = bytes.NewBuffer(thumbnail)
+		manga.Provider = provider.GetProviderByType(provider.ProviderType(providerId))
 		dbMgr.Mangas[manga.Id] = &manga
 	}
 
-	rows, err = db.Query("SELECT * FROM Chapter")
+	rows, err = db.Query("SELECT ID, MangaID, Url, Name, Number, TimeStampUnixEpoch, InternalIdentifier FROM Chapter")
 	if err != nil {
 		return err
 	}
@@ -206,7 +190,7 @@ func (dbMgr *Manager) load() error {
 	for rows.Next() {
 		chapter := Chapter{}
 		var mangaID int
-		if err = rows.Scan(&chapter.Id, &mangaID, &chapter.Url, &chapter.Name, &chapter.Number, &chapter.TimeStampUnix); err != nil {
+		if err = rows.Scan(&chapter.Id, &mangaID, &chapter.Url, &chapter.Name, &chapter.Number, &chapter.TimeStampUnix, &chapter.InternalIdentifier); err != nil {
 			return err
 		}
 

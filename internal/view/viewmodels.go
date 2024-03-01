@@ -14,6 +14,7 @@ type MangaViewModel struct {
 	ID           int
 	Title        string
 	Number       int
+	LastNumber   int
 	LastTime     string
 	Url          string
 	ThumbnailUrl string

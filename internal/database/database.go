@@ -195,28 +195,15 @@ func (dbMgr *Manager) load() error {
 			return err
 		}
 		manga.Thumbnail = bytes.NewBuffer(thumbnail)
-		dbMgr.Mangas[manga.Id] = &manga
-	}
 
-	rows, err = db.Query("SELECT * FROM Chapter")
-	if err != nil {
-		return err
-	}
-
-	for rows.Next() {
+		latestChapter := db.QueryRow("SELECT Id, Url, Name, Number, TimeStampUnixEpoch FROM Chapter where MangaID = ? ORDER BY TimeStampUnixEpoch desc LIMIT 1", manga.Id)
 		chapter := Chapter{}
-		var mangaID int
-		if err = rows.Scan(&chapter.Id, &mangaID, &chapter.Url, &chapter.Name, &chapter.Number, &chapter.TimeStampUnix); err != nil {
+		if err = latestChapter.Scan(&chapter.Id, &chapter.Url, &chapter.Name, &chapter.Number, &chapter.TimeStampUnix); err != nil {
 			return err
 		}
-
-		chapter.Manga = dbMgr.Mangas[mangaID]
-		if dbMgr.Mangas[mangaID].LatestChapter == nil || dbMgr.Mangas[mangaID].LatestChapter.TimeStampUnix < chapter.TimeStampUnix {
-			dbMgr.Mangas[mangaID].LatestChapter = &chapter
-		}
-
 		dbMgr.Chapters[chapter.Id] = &chapter
+		manga.LatestChapter = &chapter
+		dbMgr.Mangas[manga.Id] = &manga
 	}
-
 	return nil
 }

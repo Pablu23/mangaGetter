@@ -9,44 +9,15 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"runtime"
 	"time"
 )
 
 func main() {
-	dir, err := os.UserCacheDir()
-	if err != nil {
-		fmt.Println(nil)
-		return
-	}
-
-	dirPath := filepath.Join(dir, "MangaGetter")
-	filePath := filepath.Join(dirPath, "db.sqlite")
-
-	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
-		err = os.Mkdir(dirPath, os.ModePerm)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-	}
-
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		f, err := os.Create(filePath)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		err = f.Close()
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-	}
+	filePath := getDbPath()
 
 	db := database.NewDatabase(filePath, true)
-	err = db.Open()
+	err := db.Open()
 	if err != nil {
 		fmt.Println(err)
 		return

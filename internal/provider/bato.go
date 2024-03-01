@@ -109,9 +109,24 @@ func (b *Bato) GetTitleIdAndChapterId(url string) (titleId int, chapterId int, e
 	return t, c, err
 }
 
-//func (b *Bato) GetChapterList(url string) (chapterIds []int, err error) {
-//
-//}
+func (b *Bato) GetChapterList(subUrl string) (subUrls []string, err error) {
+	reg, err := regexp.Compile(`<div class="space-x-1">.*?<a href="(.*?)" .*?>Chapter (\d*)</a>`)
+	if err != nil {
+		return nil, err
+	}
+
+	html, err := b.GetHtml(subUrl)
+	if err != nil {
+		return nil, err
+	}
+
+	subUrls = make([]string, 0)
+	matches := reg.FindAllStringSubmatch(html, -1)
+	for _, match := range matches {
+		subUrls = append(subUrls, match[1])
+	}
+	return subUrls, nil
+}
 
 func (b *Bato) GetThumbnail(subUrl string) (thumbnailUrl string, err error) {
 	url := fmt.Sprintf("https://bato.to/title/%s", subUrl)

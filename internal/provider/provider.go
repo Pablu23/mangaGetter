@@ -8,4 +8,5 @@ type Provider interface {
 	GetTitleAndChapter(url string) (title string, chapter string, err error)
 	GetTitleIdAndChapterId(url string) (titleId int, chapterId int, err error)
 	GetThumbnail(mangaId string) (thumbnailUrl string, err error)
+	GetChapterList(url string) (urls []string, err error)
 }

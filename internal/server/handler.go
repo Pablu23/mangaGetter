@@ -52,19 +52,56 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 	mangaViewModels := make([]view.MangaViewModel, l)
 	counter := 0
 
+	n := time.Now().UnixNano()
+
+	var thumbNs int64 = 0
+	var titNs int64 = 0
+
+	//TODO: Change all this to be more performant
 	for _, manga := range all {
 		title := cases.Title(language.English, cases.Compact).String(strings.Replace(manga.Title, "-", " ", -1))
 
+		t1 := time.Now().UnixNano()
+
 		thumbnail, err := s.LoadThumbnail(manga.Id)
+		//TODO: Add default picture instead of not showing Manga at all
 		if err != nil {
 			continue
 		}
 		manga.Thumbnail = s.ImageBuffers[thumbnail]
 
+		t2 := time.Now().UnixNano()
+
+		thumbNs += t2 - t1
+
+		t1 = time.Now().UnixNano()
+		// This is very slow
+		l, err := s.Provider.GetChapterList("/title/" + strconv.Itoa(manga.Id))
+		if err != nil {
+			continue
+		}
+
+		le := len(l)
+		_, c, err := s.Provider.GetTitleAndChapter(l[le-1])
+		if err != nil {
+			continue
+		}
+
+		chapterNumberStr := strings.Replace(c, "ch_", "", 1)
+
+		i, err := strconv.Atoi(chapterNumberStr)
+		if err != nil {
+			continue
+		}
+		t2 = time.Now().UnixNano()
+
+		titNs += t2 - t1
+
 		mangaViewModels[counter] = view.MangaViewModel{
-			ID:     manga.Id,
-			Title:  title,
-			Number: manga.LatestChapter.Number,
+			ID:         manga.Id,
+			Title:      title,
+			Number:     manga.LatestChapter.Number,
+			LastNumber: i,
 			// I Hate this time Format... 15 = hh, 04 = mm, 02 = DD, 01 = MM, 06 == YY
 			LastTime:     time.Unix(manga.TimeStampUnix, 0).Format("15:04 (02-01-06)"),
 			Url:          manga.LatestChapter.Url,
@@ -73,9 +110,20 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 		counter++
 	}
 
+	fmt.Printf("Loading Thumbnails took %d ms\n", (thumbNs)/1000000)
+	fmt.Printf("Loading latest Chapter took %d ms\n", (titNs)/1000000)
+
+	nex := time.Now().UnixNano()
+	fmt.Printf("Creating Viewmodels took %d ms\n", (nex-n)/1000000)
+
+	n = time.Now().UnixNano()
+
 	slices.SortStableFunc(mangaViewModels, func(a, b view.MangaViewModel) int {
 		return cmp.Compare(a.Title, b.Title)
 	})
+
+	nex = time.Now().UnixNano()
+	fmt.Printf("Sorting took %d ms\n", (nex-n)/1000000)
 
 	menuViewModel := view.MenuViewModel{
 		Mangas: mangaViewModels,
@@ -117,7 +165,31 @@ func (s *Server) HandleExit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fmt.Println("Cleaned out of scope Last")
+
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+
+	go func() {
+		s.Mutex.Lock()
+		if s.PrevViewModel != nil {
+			for _, img := range s.PrevViewModel.Images {
+				delete(s.ImageBuffers, img.Path)
+			}
+		}
+		if s.CurrViewModel != nil {
+
+			for _, img := range s.CurrViewModel.Images {
+				delete(s.ImageBuffers, img.Path)
+			}
+		}
+		if s.NextViewModel != nil {
+
+			for _, img := range s.NextViewModel.Images {
+				delete(s.ImageBuffers, img.Path)
+			}
+		}
+		s.Mutex.Unlock()
+	}()
 }
 
 func (s *Server) HandleCurrent(w http.ResponseWriter, _ *http.Request) {
@@ -279,9 +351,6 @@ func (s *Server) HandleNewQuery(w http.ResponseWriter, r *http.Request) {
 
 	url := fmt.Sprintf("/title/%s", sub)
 
-	s.Mutex.Lock()
-	s.ImageBuffers = make(map[string]*bytes.Buffer)
-	s.Mutex.Unlock()
 	s.CurrSubUrl = url
 	s.PrevSubUrl = ""
 	s.NextSubUrl = ""

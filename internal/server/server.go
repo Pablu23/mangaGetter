@@ -160,8 +160,8 @@ func (s *Server) LoadCurr() {
 func (s *Server) LoadThumbnail(mangaId int) (path string, err error) {
 	strId := strconv.Itoa(mangaId)
 
-	s.Mutex.Lock()
-	defer s.Mutex.Unlock()
+	//s.Mutex.Lock()
+	//defer s.Mutex.Unlock()
 	if s.ImageBuffers[strId] != nil {
 		return strId, nil
 	}

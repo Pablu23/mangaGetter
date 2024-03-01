@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"cmp"
 	_ "embed"
 	"fmt"
@@ -23,9 +22,6 @@ func (s *Server) HandleNew(w http.ResponseWriter, r *http.Request) {
 
 	url := fmt.Sprintf("/title/%s/%s", title, chapter)
 
-	s.Mutex.Lock()
-	s.ImageBuffers = make(map[string]*bytes.Buffer)
-	s.Mutex.Unlock()
 	s.CurrSubUrl = url
 	s.PrevSubUrl = ""
 	s.NextSubUrl = ""
@@ -76,23 +72,29 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 
 		t1 = time.Now().UnixNano()
 		// This is very slow
-		l, err := s.Provider.GetChapterList("/title/" + strconv.Itoa(manga.Id))
-		if err != nil {
-			continue
+
+		if manga.LastChapterNum == 0 {
+			l, err := s.Provider.GetChapterList("/title/" + strconv.Itoa(manga.Id))
+			if err != nil {
+				continue
+			}
+
+			le := len(l)
+			_, c, err := s.Provider.GetTitleAndChapter(l[le-1])
+			if err != nil {
+				continue
+			}
+
+			chapterNumberStr := strings.Replace(c, "ch_", "", 1)
+
+			i, err := strconv.Atoi(chapterNumberStr)
+			if err != nil {
+				continue
+			}
+
+			manga.LastChapterNum = i
 		}
 
-		le := len(l)
-		_, c, err := s.Provider.GetTitleAndChapter(l[le-1])
-		if err != nil {
-			continue
-		}
-
-		chapterNumberStr := strings.Replace(c, "ch_", "", 1)
-
-		i, err := strconv.Atoi(chapterNumberStr)
-		if err != nil {
-			continue
-		}
 		t2 = time.Now().UnixNano()
 
 		titNs += t2 - t1
@@ -101,7 +103,7 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 			ID:         manga.Id,
 			Title:      title,
 			Number:     manga.LatestChapter.Number,
-			LastNumber: i,
+			LastNumber: manga.LastChapterNum,
 			// I Hate this time Format... 15 = hh, 04 = mm, 02 = DD, 01 = MM, 06 == YY
 			LastTime:     time.Unix(manga.TimeStampUnix, 0).Format("15:04 (02-01-06)"),
 			Url:          manga.LatestChapter.Url,
@@ -165,8 +167,6 @@ func (s *Server) HandleExit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Println("Cleaned out of scope Last")
-
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 
 	go func() {
@@ -189,6 +189,7 @@ func (s *Server) HandleExit(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		s.Mutex.Unlock()
+		fmt.Println("Cleaned last Manga")
 	}()
 }
 

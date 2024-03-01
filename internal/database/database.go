@@ -17,7 +17,8 @@ type Manga struct {
 	Thumbnail     *bytes.Buffer
 
 	// Not in DB
-	LatestChapter *Chapter
+	LatestChapter  *Chapter
+	LastChapterNum int
 }
 
 type Chapter struct {

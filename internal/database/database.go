@@ -136,9 +136,22 @@ func (dbMgr *Manager) Save() error {
 				}
 			}
 		} else {
-			_, err := db.Exec("UPDATE Manga set Title = ?, TimeStampUnixEpoch = ? WHERE ID = ?", m.Title, m.TimeStampUnix, m.Id)
+			tSet := 0
+			err := db.QueryRow("SELECT COUNT(*) from Manga where ID = ? and Thumbnail IS NOT NULL", m.Id).Scan(&tSet)
 			if err != nil {
 				return err
+			}
+
+			if tSet != 0 {
+				_, err = db.Exec("UPDATE Manga set Title = ?, TimeStampUnixEpoch = ? WHERE ID = ?", m.Title, m.TimeStampUnix, m.Id)
+				if err != nil {
+					return err
+				}
+			} else {
+				_, err = db.Exec("UPDATE Manga set Title = ?, TimeStampUnixEpoch = ?, Thumbnail = ? WHERE ID = ?", m.Title, m.TimeStampUnix, m.Thumbnail.Bytes(), m.Id)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -195,7 +208,9 @@ func (dbMgr *Manager) load() error {
 		if err = rows.Scan(&manga.Id, &manga.Title, &manga.TimeStampUnix, &thumbnail); err != nil {
 			return err
 		}
-		manga.Thumbnail = bytes.NewBuffer(thumbnail)
+		if len(thumbnail) != 0 {
+			manga.Thumbnail = bytes.NewBuffer(thumbnail)
+		}
 
 		latestChapter := db.QueryRow("SELECT Id, Url, Name, Number, TimeStampUnixEpoch FROM Chapter where MangaID = ? ORDER BY TimeStampUnixEpoch desc LIMIT 1", manga.Id)
 		chapter := Chapter{}

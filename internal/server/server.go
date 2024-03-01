@@ -157,16 +157,21 @@ func (s *Server) LoadCurr() {
 	fmt.Println("Loaded current")
 }
 
-func (s *Server) LoadThumbnail(mangaId int) (path string, err error) {
-	strId := strconv.Itoa(mangaId)
+func (s *Server) LoadThumbnail(manga *database.Manga) (path string, err error) {
+	strId := strconv.Itoa(manga.Id)
 
-	//s.Mutex.Lock()
-	//defer s.Mutex.Unlock()
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
 	if s.ImageBuffers[strId] != nil {
 		return strId, nil
 	}
 
-	url, err := s.Provider.GetThumbnail(strconv.Itoa(mangaId))
+	if manga.Thumbnail != nil {
+		s.ImageBuffers[strId] = manga.Thumbnail
+		return strId, nil
+	}
+
+	url, err := s.Provider.GetThumbnail(strId)
 	if err != nil {
 		return "", err
 	}
@@ -174,6 +179,7 @@ func (s *Server) LoadThumbnail(mangaId int) (path string, err error) {
 	if err != nil {
 		return "", err
 	}
+	manga.Thumbnail = ram
 	s.ImageBuffers[strId] = ram
 	return strId, nil
 }

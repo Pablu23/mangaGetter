@@ -59,7 +59,7 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 
 		t1 := time.Now().UnixNano()
 
-		thumbnail, err := s.LoadThumbnail(manga.Id)
+		thumbnail, err := s.LoadThumbnail(manga)
 		//TODO: Add default picture instead of not showing Manga at all
 		if err != nil {
 			continue
@@ -71,8 +71,9 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 		thumbNs += t2 - t1
 
 		t1 = time.Now().UnixNano()
-		// This is very slow
 
+		// This is very slow
+		// TODO: put this into own Method
 		if manga.LastChapterNum == 0 {
 			l, err := s.Provider.GetChapterList("/title/" + strconv.Itoa(manga.Id))
 			if err != nil {
@@ -275,7 +276,7 @@ func (s *Server) HandleImage(w http.ResponseWriter, r *http.Request) {
 //go:embed favicon.ico
 var ico []byte
 
-func (s *Server) HandleFavicon(w http.ResponseWriter, r *http.Request) {
+func (s *Server) HandleFavicon(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "image/webp")
 	_, err := w.Write(ico)
 	if err != nil {

@@ -33,7 +33,7 @@ func (s *Server) HandleNew(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/current/", http.StatusTemporaryRedirect)
 }
 
-func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) HandleMenu(w http.ResponseWriter, r *http.Request) {
 	tmpl := template.Must(view.GetViewTemplate(view.Menu))
 
 	fmt.Println("Locking Rw in handler.go:43")
@@ -75,25 +75,10 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 		// This is very slow
 		// TODO: put this into own Method
 		if manga.LastChapterNum == 0 {
-			l, err := s.Provider.GetChapterList("/title/" + strconv.Itoa(manga.Id))
+			err := s.UpdateLatestAvailableChapter(manga)
 			if err != nil {
-				continue
+				fmt.Println(err)
 			}
-
-			le := len(l)
-			_, c, err := s.Provider.GetTitleAndChapter(l[le-1])
-			if err != nil {
-				continue
-			}
-
-			chapterNumberStr := strings.Replace(c, "ch_", "", 1)
-
-			i, err := strconv.Atoi(chapterNumberStr)
-			if err != nil {
-				continue
-			}
-
-			manga.LastChapterNum = i
 		}
 
 		t2 = time.Now().UnixNano()
@@ -121,9 +106,29 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 
 	n = time.Now().UnixNano()
 
-	slices.SortStableFunc(mangaViewModels, func(a, b view.MangaViewModel) int {
-		return cmp.Compare(a.Title, b.Title)
-	})
+	sort := r.URL.Query().Get("sort")
+
+	if sort == "" || sort == "title" {
+		slices.SortStableFunc(mangaViewModels, func(a, b view.MangaViewModel) int {
+			return cmp.Compare(a.Title, b.Title)
+		})
+	} else if sort == "chapter" {
+		slices.SortStableFunc(mangaViewModels, func(a, b view.MangaViewModel) int {
+			return cmp.Compare(b.Number, a.Number)
+		})
+	} else if sort == "last" {
+		slices.SortStableFunc(mangaViewModels, func(a, b view.MangaViewModel) int {
+			aT, err := time.Parse("15:04 (02-01-06)", a.LastTime)
+			if err != nil {
+				return cmp.Compare(a.Title, b.Title)
+			}
+			bT, err := time.Parse("15:04 (02-01-06)", b.LastTime)
+			if err != nil {
+				return cmp.Compare(a.Title, b.Title)
+			}
+			return bT.Compare(aT)
+		})
+	}
 
 	nex = time.Now().UnixNano()
 	fmt.Printf("Sorting took %d ms\n", (nex-n)/1000000)

@@ -1,8 +1,9 @@
 create table if not exists Manga (
     ID integer not null primary key,
     Title text,
-    TimeStampUnixEpoch int,
-    Thumbnail blob
+    TimeStampUnixEpoch integer not null,
+    Thumbnail blob,
+    LatestAvailableChapter integer not null
 );
 
 create table if not exists Chapter (
@@ -10,7 +11,7 @@ create table if not exists Chapter (
     MangaID integer not null,
     Url text not null,
     Name text null,
-    Number int not null,
-    TimeStampUnixEpoch int,
+    Number integer not null,
+    TimeStampUnixEpoch integer not null,
     foreign key(MangaID) references Manga(ID)
 );

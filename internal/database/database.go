@@ -11,14 +11,14 @@ import (
 )
 
 type Manga struct {
-	Id            int
-	Title         string
-	TimeStampUnix int64
-	Thumbnail     *bytes.Buffer
+	Id             int
+	Title          string
+	TimeStampUnix  int64
+	Thumbnail      *bytes.Buffer
+	LastChapterNum int
 
 	// Not in DB
-	LatestChapter  *Chapter
-	LastChapterNum int
+	LatestChapter *Chapter
 }
 
 type Chapter struct {
@@ -125,12 +125,12 @@ func (dbMgr *Manager) Save() error {
 
 		if count == 0 {
 			if m.Thumbnail != nil {
-				_, err := db.Exec("INSERT INTO Manga(ID, Title, TimeStampUnixEpoch, Thumbnail) values(?, ?, ?, ?)", m.Id, m.Title, m.TimeStampUnix, m.Thumbnail.Bytes())
+				_, err := db.Exec("INSERT INTO Manga(ID, Title, TimeStampUnixEpoch, Thumbnail, LatestAvailableChapter) values(?, ?, ?, ?, ?)", m.Id, m.Title, m.TimeStampUnix, m.Thumbnail.Bytes(), m.LastChapterNum)
 				if err != nil {
 					return err
 				}
 			} else {
-				_, err := db.Exec("INSERT INTO Manga(ID, Title, TimeStampUnixEpoch ) values(?, ?, ?)", m.Id, m.Title, m.TimeStampUnix)
+				_, err := db.Exec("INSERT INTO Manga(ID, Title, TimeStampUnixEpoch, LatestAvailableChapter) values(?, ?, ?, ?)", m.Id, m.Title, m.TimeStampUnix, m.LastChapterNum)
 				if err != nil {
 					return err
 				}
@@ -143,12 +143,12 @@ func (dbMgr *Manager) Save() error {
 			}
 
 			if tSet != 0 {
-				_, err = db.Exec("UPDATE Manga set Title = ?, TimeStampUnixEpoch = ? WHERE ID = ?", m.Title, m.TimeStampUnix, m.Id)
+				_, err = db.Exec("UPDATE Manga set Title = ?, TimeStampUnixEpoch = ?, LatestAvailableChapter = ? WHERE ID = ?", m.Title, m.TimeStampUnix, m.LastChapterNum, m.Id)
 				if err != nil {
 					return err
 				}
 			} else {
-				_, err = db.Exec("UPDATE Manga set Title = ?, TimeStampUnixEpoch = ?, Thumbnail = ? WHERE ID = ?", m.Title, m.TimeStampUnix, m.Thumbnail.Bytes(), m.Id)
+				_, err = db.Exec("UPDATE Manga set Title = ?, TimeStampUnixEpoch = ?, Thumbnail = ?, LatestAvailableChapter = ? WHERE ID = ?", m.Title, m.TimeStampUnix, m.Thumbnail.Bytes(), m.LastChapterNum, m.Id)
 				if err != nil {
 					return err
 				}
@@ -197,7 +197,7 @@ func (dbMgr *Manager) load() error {
 		dbMgr.Rw.Unlock()
 	}()
 
-	rows, err := db.Query("SELECT * FROM Manga")
+	rows, err := db.Query("SELECT Id, Title, TimeStampUnixEpoch, Thumbnail, LatestAvailableChapter FROM Manga")
 	if err != nil {
 		return err
 	}
@@ -205,7 +205,7 @@ func (dbMgr *Manager) load() error {
 	for rows.Next() {
 		manga := Manga{}
 		var thumbnail []byte
-		if err = rows.Scan(&manga.Id, &manga.Title, &manga.TimeStampUnix, &thumbnail); err != nil {
+		if err = rows.Scan(&manga.Id, &manga.Title, &manga.TimeStampUnix, &thumbnail, &manga.LastChapterNum); err != nil {
 			return err
 		}
 		if len(thumbnail) != 0 {
@@ -217,8 +217,9 @@ func (dbMgr *Manager) load() error {
 		if err = latestChapter.Scan(&chapter.Id, &chapter.Url, &chapter.Name, &chapter.Number, &chapter.TimeStampUnix); err != nil {
 			return err
 		}
-		dbMgr.Chapters[chapter.Id] = &chapter
+		chapter.Manga = &manga
 		manga.LatestChapter = &chapter
+		dbMgr.Chapters[chapter.Id] = &chapter
 		dbMgr.Mangas[manga.Id] = &manga
 	}
 	return nil

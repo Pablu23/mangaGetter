@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Server struct {
@@ -44,6 +45,40 @@ func New(provider provider.Provider, db *database.Manager) *Server {
 	}
 
 	return &s
+}
+
+func (s *Server) Start() error {
+	http.HandleFunc("/", s.HandleMenu)
+	http.HandleFunc("/new/", s.HandleNewQuery)
+	http.HandleFunc("/new/title/{title}/{chapter}", s.HandleNew)
+	http.HandleFunc("/current/", s.HandleCurrent)
+	http.HandleFunc("/img/{url}/", s.HandleImage)
+	http.HandleFunc("POST /next", s.HandleNext)
+	http.HandleFunc("POST /prev", s.HandlePrev)
+	http.HandleFunc("POST /exit", s.HandleExit)
+	http.HandleFunc("POST /delete", s.HandleDelete)
+	http.HandleFunc("/favicon.ico", s.HandleFavicon)
+
+	// Update Latest Chapter every 5 Minutes
+	go func(s *Server) {
+		for {
+			select {
+			case <-time.After(time.Minute * 5):
+				s.DbMgr.Rw.Lock()
+				for _, m := range s.DbMgr.Mangas {
+					err := s.UpdateLatestAvailableChapter(m)
+					if err != nil {
+						fmt.Println(err)
+					}
+				}
+				s.DbMgr.Rw.Unlock()
+			}
+		}
+	}(s)
+
+	fmt.Println("Server starting...")
+	err := http.ListenAndServe(":8000", nil)
+	return err
 }
 
 func (s *Server) LoadNext() {
@@ -155,6 +190,31 @@ func (s *Server) LoadCurr() {
 
 	s.CurrViewModel = &view.ImageViewModel{Images: imagesCurr, Title: full}
 	fmt.Println("Loaded current")
+}
+
+func (s *Server) UpdateLatestAvailableChapter(manga *database.Manga) error {
+	fmt.Printf("Updating Manga: %s\n", manga.Title)
+
+	l, err := s.Provider.GetChapterList("/title/" + strconv.Itoa(manga.Id))
+	if err != nil {
+		return err
+	}
+
+	le := len(l)
+	_, c, err := s.Provider.GetTitleAndChapter(l[le-1])
+	if err != nil {
+		return err
+	}
+
+	chapterNumberStr := strings.Replace(c, "ch_", "", 1)
+
+	i, err := strconv.Atoi(chapterNumberStr)
+	if err != nil {
+		return err
+	}
+
+	manga.LastChapterNum = i
+	return nil
 }
 
 func (s *Server) LoadThumbnail(manga *database.Manga) (path string, err error) {

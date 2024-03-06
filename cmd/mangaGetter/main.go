@@ -5,7 +5,6 @@ import (
 	"mangaGetter/internal/database"
 	"mangaGetter/internal/provider"
 	"mangaGetter/internal/server"
-	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -34,17 +33,6 @@ func main() {
 		}
 	}()
 
-	http.HandleFunc("/", s.HandleMenu)
-	http.HandleFunc("/new/", s.HandleNewQuery)
-	http.HandleFunc("/new/title/{title}/{chapter}", s.HandleNew)
-	http.HandleFunc("/current/", s.HandleCurrent)
-	http.HandleFunc("/img/{url}/", s.HandleImage)
-	http.HandleFunc("POST /next", s.HandleNext)
-	http.HandleFunc("POST /prev", s.HandlePrev)
-	http.HandleFunc("POST /exit", s.HandleExit)
-	http.HandleFunc("POST /delete", s.HandleDelete)
-	http.HandleFunc("/favicon.ico", s.HandleFavicon)
-
 	go func() {
 		time.Sleep(300 * time.Millisecond)
 		err := open("http://localhost:8000")
@@ -53,11 +41,9 @@ func main() {
 		}
 	}()
 
-	fmt.Println("Server starting...")
-	err = http.ListenAndServe(":8000", nil)
+	err = s.Start()
 	if err != nil {
-		fmt.Println(err)
-		return
+		panic(err)
 	}
 }
 

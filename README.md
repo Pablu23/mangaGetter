@@ -8,10 +8,11 @@ That's, why I created this simple pre Loader, right now it's not really user-fri
 a few more features
 
 # Features that might get added:
-- Manga / Chapter History
 - Searchbar
 - Better looking UI
-- Main Screen
+- Genres and Filter
+- More Providers like Asuratoon
+- Performance improvements
 
 # Pretext
 

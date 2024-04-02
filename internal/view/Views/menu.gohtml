@@ -12,7 +12,7 @@
             font-size: 25px;
         }
 
-        .dark-mode {
+        .dark {
             background-color: #171717;
             color: white;
         }
@@ -101,17 +101,31 @@
             text-align: center;
         }
 
+        label {
+            display: flex;
+            align-content: center;
+            justify-content: center;
+            margin: 0 auto;
+        }
+
+        select {
+            width: 10em;
+            margin-bottom: 10px;
+            margin-top: 10px;
+        }
 
     </style>
     <script>
-        function myFunction() {
-            var element = document.body;
-            element.classList.toggle("dark-mode");
+        function myFunction(theme) {
+            if (theme !== "white") {
+                var element = document.body;
+                element.classList.toggle(theme);
+            }
         }
     </script>
 
 </head>
-<body>
+<body onload="myFunction({{(index .Settings "theme").Value}})">
     <form method="post" action="/new/">
         <label>
             New Sub Url
@@ -119,7 +133,15 @@
         </label>
         <input type="submit" value="Open" class="button-36">
     </form>
-    <button onclick="myFunction()">Toggle dark mode</button>
+
+    <form method="post" action="/setting/">
+        <label for="theme">Theme</label>
+        <select onchange="this.form.submit()" id="theme" name="theme">
+            <option value="white">White</option>
+            <option value="dark">Dark</option>
+        </select>
+        <input type="hidden" name="setting" value="theme">
+    </form>
 
     <table class="table">
         <tr>

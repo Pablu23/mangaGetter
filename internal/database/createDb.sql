@@ -15,3 +15,9 @@ create table if not exists Chapter (
     TimeStampUnixEpoch integer not null,
     foreign key(MangaID) references Manga(ID)
 );
+
+create table if not exists Setting (
+    Name text not null primary key,
+    Value text,
+    DefaultValue text not null
+);

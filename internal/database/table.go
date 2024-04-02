@@ -88,6 +88,16 @@ func (d *DbTable[K, T]) All() []T {
 	return res
 }
 
+func (d *DbTable[K, T]) Map() map[K]T {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	res := make(map[K]T, len(d.items))
+	for k, manga := range d.items {
+		res[k] = manga
+	}
+	return res
+}
+
 func (d *DbTable[K, T]) Delete(db *sql.DB, key K) error {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()

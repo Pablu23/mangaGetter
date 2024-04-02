@@ -136,7 +136,8 @@ func (s *Server) HandleMenu(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("Sorting took %d ms\n", (nex-n)/1000000)
 
 	menuViewModel := view.MenuViewModel{
-		Mangas: mangaViewModels,
+		Settings: s.DbMgr.Settings.Map(),
+		Mangas:   mangaViewModels,
 	}
 
 	err := tmpl.Execute(w, menuViewModel)
@@ -334,6 +335,23 @@ func (s *Server) HandlePrev(w http.ResponseWriter, r *http.Request) {
 	go s.LoadPrev()
 
 	http.Redirect(w, r, "/current/", http.StatusTemporaryRedirect)
+}
+
+func (s *Server) HandleSetting(w http.ResponseWriter, r *http.Request) {
+	settingName := r.PostFormValue("setting")
+	settingValue := r.PostFormValue(settingName)
+
+	setting, ok := s.DbMgr.Settings.Get(settingName)
+	if !ok {
+		s.DbMgr.Settings.Set(settingName, database.NewSetting(settingName, settingValue))
+	} else {
+		if setting.Value != settingValue {
+			setting.Value = settingValue
+			s.DbMgr.Settings.Set(settingName, setting)
+		}
+	}
+
+	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 }
 
 func (s *Server) HandleNewQuery(w http.ResponseWriter, r *http.Request) {

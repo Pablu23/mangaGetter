@@ -11,6 +11,7 @@ type Manager struct {
 	db                *sql.DB
 	Mangas            DbTable[int, Manga]
 	Chapters          DbTable[int, Chapter]
+	Settings          DbTable[string, Setting]
 	CreateIfNotExists bool
 }
 
@@ -18,8 +19,9 @@ func NewDatabase(connectionString string, createIfNotExists bool) Manager {
 	return Manager{
 		ConnectionString:  connectionString,
 		db:                nil,
-		Mangas:            NewDbTable[int, Manga](updateManga, insertManga, loadMangas, deleteManga),
-		Chapters:          NewDbTable[int, Chapter](updateChapter, insertChapter, loadChapters, deleteChapter),
+		Mangas:            NewDbTable(updateManga, insertManga, loadMangas, deleteManga),
+		Chapters:          NewDbTable(updateChapter, insertChapter, loadChapters, deleteChapter),
+		Settings:          NewDbTable(updateSetting, insertSetting, loadSettings, deleteSetting),
 		CreateIfNotExists: createIfNotExists,
 	}
 }
@@ -75,8 +77,12 @@ func (dbMgr *Manager) Save() error {
 	if err != nil {
 		return err
 	}
+	err = dbMgr.Chapters.Save(dbMgr.db)
+	if err != nil {
+		return err
+	}
 
-	return dbMgr.Chapters.Save(dbMgr.db)
+	return dbMgr.Settings.Save(dbMgr.db)
 }
 
 //go:embed createDb.sql
@@ -97,6 +103,12 @@ func (dbMgr *Manager) load() error {
 	if err != nil {
 		return err
 	}
+
+	err = dbMgr.Settings.Load(dbMgr.db)
+	if err != nil {
+		return err
+	}
+	initSettings(&dbMgr.Settings)
 
 	return nil
 }

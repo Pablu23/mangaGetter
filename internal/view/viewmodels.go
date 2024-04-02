@@ -1,5 +1,7 @@
 package view
 
+import "mangaGetter/internal/database"
+
 type Image struct {
 	Path  string
 	Index int
@@ -21,5 +23,6 @@ type MangaViewModel struct {
 }
 
 type MenuViewModel struct {
-	Mangas []MangaViewModel
+	Settings map[string]database.Setting
+	Mangas   []MangaViewModel
 }

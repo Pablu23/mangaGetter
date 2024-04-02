@@ -61,6 +61,17 @@ func (s *Server) Start() error {
 
 	// Update Latest Chapter every 5 Minutes
 	go func(s *Server) {
+		time.AfterFunc(time.Second*10, func() {
+			s.DbMgr.Rw.Lock()
+			for _, m := range s.DbMgr.Mangas {
+				err := s.UpdateLatestAvailableChapter(m)
+				if err != nil {
+					fmt.Println(err)
+				}
+			}
+			s.DbMgr.Rw.Unlock()
+		})
+
 		for {
 			select {
 			case <-time.After(time.Minute * 5):

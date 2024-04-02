@@ -31,6 +31,12 @@
             vertical-align: middle;
         }
 
+        @media (max-width: 500px) {
+            .scroll-container img {
+                width: 100%;
+            }
+        }
+
         /*
          * I have no clue what css is, jesus christ ...
          */
@@ -43,6 +49,18 @@
             vertical-align: middle;
             justify-content: center;
             display: flex;
+        }
+
+        .fixed-button {
+            position: fixed;
+            bottom: 80px;
+            right: 15px;
+            margin-bottom: 40px;
+            z-index: 999;
+        }
+
+        .text{
+            color: white;
         }
 
         .button-36 {
@@ -79,13 +97,17 @@
     </style>
 </head>
 <body>
-    <div class="center">
+    <h1 class="center text">{{.Title}}</h1>
+    <div class="center" id="top">
         <form method="post" action="/prev">
             <input type="submit" name="Prev" value="Prev" class="button-36">
             <input type="submit" name="Exit" value="Exit" class="button-36" formaction="/exit">
             <input type="submit" name="Next" value="Next" class="button-36" formaction="/next">
         </form>
     </div>
+    <button class="fixed-button">
+        <a href="#top">TOP</a>
+    </button>
     <div class="scroll-container">
         {{range .Images}}
             <img src="/img/{{.Path}}" alt="img_{{.Index}}"/>

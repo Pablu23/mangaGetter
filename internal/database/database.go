@@ -10,26 +10,6 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-type Manga struct {
-	Id             int
-	Title          string
-	TimeStampUnix  int64
-	Thumbnail      *bytes.Buffer
-	LastChapterNum int
-
-	// Not in DB
-	LatestChapter *Chapter
-}
-
-type Chapter struct {
-	Id            int
-	Manga         *Manga
-	Url           string
-	Name          string
-	Number        int
-	TimeStampUnix int64
-}
-
 type Manager struct {
 	ConnectionString string
 	db               *sql.DB

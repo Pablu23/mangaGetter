@@ -117,12 +117,14 @@ func (d *DbTable[K, T]) Save(db *sql.DB) error {
 			if err != nil {
 				return err
 			}
+			d.updated[k] = Loaded
 		} else {
 			item := d.items[k]
 			err := d.insertFunc(db, &item)
 			if err != nil {
 				return err
 			}
+			d.updated[k] = Loaded
 		}
 	}
 	return nil

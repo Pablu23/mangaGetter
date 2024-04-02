@@ -2,9 +2,7 @@ package database
 
 import (
 	"bytes"
-	"cmp"
 	"database/sql"
-	"slices"
 )
 
 type Manga struct {
@@ -27,17 +25,20 @@ func NewManga(id int, title string, timeStampUnix int64) Manga {
 func (m *Manga) GetLatestChapter(chapters *DbTable[int, Chapter]) (*Chapter, bool) {
 	c := chapters.All()
 
-	slices.SortStableFunc(c, func(a, b Chapter) int {
-		return cmp.Compare(b.TimeStampUnix, a.TimeStampUnix)
-	})
-
-	for _, chapter := range c {
-		if chapter.MangaId == m.Id {
-			return &chapter, true
+	highest := int64(0)
+	index := 0
+	for i, chapter := range c {
+		if chapter.MangaId == m.Id && highest < chapter.TimeStampUnix {
+			highest = chapter.TimeStampUnix
+			index = i
 		}
 	}
 
-	return nil, false
+	if highest == 0 {
+		return nil, false
+	}
+
+	return &c[index], true
 }
 
 func updateManga(db *sql.DB, m *Manga) error {

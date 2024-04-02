@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 )
 
+const port = 8000
+
 func getDbPath() string {
 	dir, err := os.UserCacheDir()
 	if err != nil {

@@ -33,8 +33,6 @@ func main() {
 		}
 	}()
 
-	port := 8080
-
 	go func() {
 		time.Sleep(300 * time.Millisecond)
 		err := open(fmt.Sprintf("http://localhost:%d", port))

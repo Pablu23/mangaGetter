@@ -2,8 +2,9 @@ package database
 
 import (
 	"bytes"
+	"cmp"
 	"database/sql"
-	"sync"
+	"slices"
 )
 
 type Manga struct {
@@ -12,73 +13,31 @@ type Manga struct {
 	TimeStampUnix  int64
 	Thumbnail      *bytes.Buffer
 	LastChapterNum int
-
-	// Not in DB
-	LatestChapter *Chapter
 }
 
-type MangaTable[K comparable] struct {
-	mutex   sync.Mutex
-	mangas  map[K]Manga
-	updated map[K]DbStatus
-}
-
-func (m *MangaTable[K]) Get(key K) (Manga, bool) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-	val, ok := m.mangas[key]
-	return val, ok
-}
-
-func (m *MangaTable[K]) Set(key K, new Manga) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-	val, ok := m.updated[key]
-	if ok && val == Loaded {
-		m.updated[key] = Updated
-	} else {
-		m.updated[key] = New
+func NewManga(id int, title string, timeStampUnix int64) Manga {
+	return Manga{
+		Id:            id,
+		Title:         title,
+		TimeStampUnix: timeStampUnix,
 	}
-	m.mangas[key] = new
 }
 
-func (m *MangaTable[K]) All() []Manga {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-	res := make([]Manga, len(m.mangas))
-	counter := 0
-	for _, manga := range m.mangas {
-		res[counter] = manga
-		counter++
-	}
-	return res
-}
+// GetLatestChapter TODO: Cache this somehow
+func (m *Manga) GetLatestChapter(chapters *DbTable[int, Chapter]) (*Chapter, bool) {
+	c := chapters.All()
 
-func (m *MangaTable[K]) Save(db *sql.DB) error {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-	for k, status := range m.updated {
-		if status == Loaded {
-			continue
-		} else if status == Updated {
-			manga := m.mangas[k]
-			err := updateManga(db, &manga)
-			if err != nil {
-				return err
-			}
-		} else {
-			manga := m.mangas[k]
-			err := insertManga(db, &manga)
-			if err != nil {
-				return err
-			}
+	slices.SortStableFunc(c, func(a, b Chapter) int {
+		return cmp.Compare(b.TimeStampUnix, a.TimeStampUnix)
+	})
+
+	for _, chapter := range c {
+		if chapter.MangaId == m.Id {
+			return &chapter, true
 		}
 	}
-	return nil
-}
 
-func (m *MangaTable[K]) Load(db *sql.DB) error {
-	panic("")
+	return nil, false
 }
 
 func updateManga(db *sql.DB, m *Manga) error {
@@ -90,5 +49,34 @@ func updateManga(db *sql.DB, m *Manga) error {
 func insertManga(db *sql.DB, manga *Manga) error {
 	const cmd = "INSERT INTO Manga(ID, Title, TimeStampUnixEpoch, Thumbnail, LatestAvailableChapter) values(?, ?, ?, ?, ?)"
 	_, err := db.Exec(cmd, manga.Id, manga.Title, manga.TimeStampUnix, manga.Thumbnail.Bytes(), manga.LastChapterNum)
+	return err
+}
+
+func loadMangas(db *sql.DB) (map[int]Manga, error) {
+	rows, err := db.Query("SELECT Id, Title, TimeStampUnixEpoch, Thumbnail, LatestAvailableChapter FROM Manga")
+	if err != nil {
+
+		return nil, err
+	}
+	res := make(map[int]Manga)
+
+	for rows.Next() {
+		manga := Manga{}
+		var thumbnail []byte
+		if err = rows.Scan(&manga.Id, &manga.Title, &manga.TimeStampUnix, &thumbnail, &manga.LastChapterNum); err != nil {
+			return nil, err
+		}
+		if len(thumbnail) != 0 {
+			manga.Thumbnail = bytes.NewBuffer(thumbnail)
+		}
+
+		res[manga.Id] = manga
+	}
+
+	return res, nil
+}
+
+func deleteManga(db *sql.DB, key int) error {
+	_, err := db.Exec("DELETE from Chapter where ID = ?", key)
 	return err
 }

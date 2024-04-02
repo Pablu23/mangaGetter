@@ -35,15 +35,7 @@ func (s *Server) HandleNew(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) HandleMenu(w http.ResponseWriter, r *http.Request) {
 	tmpl := template.Must(view.GetViewTemplate(view.Menu))
-
-	fmt.Println("Locking Rw in handler.go:43")
-	s.DbMgr.Rw.Lock()
-	defer func() {
-		fmt.Println("Unlocking Rw in handler.go:46")
-		s.DbMgr.Rw.Unlock()
-	}()
-
-	all := s.DbMgr.Mangas
+	all := s.DbMgr.Mangas.All()
 	l := len(all)
 	mangaViewModels := make([]view.MangaViewModel, l)
 	counter := 0
@@ -59,12 +51,14 @@ func (s *Server) HandleMenu(w http.ResponseWriter, r *http.Request) {
 
 		t1 := time.Now().UnixNano()
 
-		thumbnail, err := s.LoadThumbnail(manga)
+		thumbnail, updated, err := s.LoadThumbnail(&manga)
 		//TODO: Add default picture instead of not showing Manga at all
 		if err != nil {
 			continue
 		}
-		manga.Thumbnail = s.ImageBuffers[thumbnail]
+		if updated {
+			s.DbMgr.Mangas.Set(manga.Id, manga)
+		}
 
 		t2 := time.Now().UnixNano()
 
@@ -75,9 +69,12 @@ func (s *Server) HandleMenu(w http.ResponseWriter, r *http.Request) {
 		// This is very slow
 		// TODO: put this into own Method
 		if manga.LastChapterNum == 0 {
-			err := s.UpdateLatestAvailableChapter(manga)
+			err, updated := s.UpdateLatestAvailableChapter(&manga)
 			if err != nil {
 				fmt.Println(err)
+			}
+			if updated {
+				s.DbMgr.Mangas.Set(manga.Id, manga)
 			}
 		}
 
@@ -85,14 +82,19 @@ func (s *Server) HandleMenu(w http.ResponseWriter, r *http.Request) {
 
 		titNs += t2 - t1
 
+		latestChapter, ok := manga.GetLatestChapter(&s.DbMgr.Chapters)
+		if !ok {
+			continue
+		}
+
 		mangaViewModels[counter] = view.MangaViewModel{
 			ID:         manga.Id,
 			Title:      title,
-			Number:     manga.LatestChapter.Number,
+			Number:     latestChapter.Number,
 			LastNumber: manga.LastChapterNum,
 			// I Hate this time Format... 15 = hh, 04 = mm, 02 = DD, 01 = MM, 06 == YY
 			LastTime:     time.Unix(manga.TimeStampUnix, 0).Format("15:04 (02-01-06)"),
-			Url:          manga.LatestChapter.Url,
+			Url:          latestChapter.Url,
 			ThumbnailUrl: thumbnail,
 		}
 		counter++
@@ -201,56 +203,37 @@ func (s *Server) HandleExit(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) HandleCurrent(w http.ResponseWriter, _ *http.Request) {
 	tmpl := template.Must(view.GetViewTemplate(view.Viewer))
-
-	fmt.Println("Locking Rw in handler.go:125")
-	s.DbMgr.Rw.Lock()
-	defer func() {
-		fmt.Println("Unlocking Rw in handler.go:128")
-		s.DbMgr.Rw.Unlock()
-	}()
-
 	mangaId, chapterId, err := s.Provider.GetTitleIdAndChapterId(s.CurrSubUrl)
 	if err != nil {
 		fmt.Println(err)
 	} else {
-		title, chapter, err := s.Provider.GetTitleAndChapter(s.CurrSubUrl)
+		title, chapterName, err := s.Provider.GetTitleAndChapter(s.CurrSubUrl)
 		if err != nil {
 			fmt.Println(err)
 		} else {
-			var manga *database.Manga
-			if s.DbMgr.Mangas[mangaId] == nil {
-				manga = &database.Manga{
-					Id:            mangaId,
-					Title:         title,
-					TimeStampUnix: time.Now().Unix(),
-				}
-				s.DbMgr.Mangas[mangaId] = manga
+			manga, ok := s.DbMgr.Mangas.Get(mangaId)
+			if !ok {
+				manga = database.NewManga(mangaId, title, time.Now().Unix())
 			} else {
-				manga = s.DbMgr.Mangas[mangaId]
-				s.DbMgr.Mangas[mangaId].TimeStampUnix = time.Now().Unix()
+				manga.TimeStampUnix = time.Now().Unix()
 			}
 
-			if s.DbMgr.Chapters[chapterId] == nil {
-				chapterNumberStr := strings.Replace(chapter, "ch_", "", 1)
+			chapter, ok := s.DbMgr.Chapters.Get(chapterId)
+			if !ok {
+				chapterNumberStr := strings.Replace(chapterName, "ch_", "", 1)
 				number, err := strconv.Atoi(chapterNumberStr)
 				if err != nil {
 					fmt.Println(err)
 					number = 0
 				}
 
-				s.DbMgr.Chapters[chapterId] = &database.Chapter{
-					Id:            chapterId,
-					Manga:         manga,
-					Url:           s.CurrSubUrl,
-					Name:          chapter,
-					Number:        number,
-					TimeStampUnix: time.Now().Unix(),
-				}
+				chapter = database.NewChapter(chapterId, manga.Id, s.CurrSubUrl, chapterName, number, time.Now().Unix())
 			} else {
-				s.DbMgr.Chapters[chapterId].TimeStampUnix = time.Now().Unix()
+				chapter.TimeStampUnix = time.Now().Unix()
 			}
 
-			s.DbMgr.Mangas[mangaId].LatestChapter = s.DbMgr.Chapters[chapterId]
+			s.DbMgr.Chapters.Set(chapterId, chapter)
+			s.DbMgr.Mangas.Set(mangaId, manga)
 		}
 	}
 

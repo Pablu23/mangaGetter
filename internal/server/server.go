@@ -47,7 +47,7 @@ func New(provider provider.Provider, db *database.Manager) *Server {
 	return &s
 }
 
-func (s *Server) Start() error {
+func (s *Server) Start(port int) error {
 	http.HandleFunc("/", s.HandleMenu)
 	http.HandleFunc("/new/", s.HandleNewQuery)
 	http.HandleFunc("/new/title/{title}/{chapter}", s.HandleNew)
@@ -62,33 +62,35 @@ func (s *Server) Start() error {
 	// Update Latest Chapter every 5 Minutes
 	go func(s *Server) {
 		time.AfterFunc(time.Second*10, func() {
-			s.DbMgr.Rw.Lock()
-			for _, m := range s.DbMgr.Mangas {
-				err := s.UpdateLatestAvailableChapter(m)
+			for _, m := range s.DbMgr.Mangas.All() {
+				err, updated := s.UpdateLatestAvailableChapter(&m)
 				if err != nil {
 					fmt.Println(err)
 				}
+				if updated {
+					s.DbMgr.Mangas.Set(m.Id, m)
+				}
 			}
-			s.DbMgr.Rw.Unlock()
 		})
 
 		for {
 			select {
 			case <-time.After(time.Minute * 5):
-				s.DbMgr.Rw.Lock()
-				for _, m := range s.DbMgr.Mangas {
-					err := s.UpdateLatestAvailableChapter(m)
+				for _, m := range s.DbMgr.Mangas.All() {
+					err, updated := s.UpdateLatestAvailableChapter(&m)
 					if err != nil {
 						fmt.Println(err)
 					}
+					if updated {
+						s.DbMgr.Mangas.Set(m.Id, m)
+					}
 				}
-				s.DbMgr.Rw.Unlock()
 			}
 		}
 	}(s)
 
 	fmt.Println("Server starting...")
-	err := http.ListenAndServe(":8000", nil)
+	err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 	return err
 }
 
@@ -203,56 +205,60 @@ func (s *Server) LoadCurr() {
 	fmt.Println("Loaded current")
 }
 
-func (s *Server) UpdateLatestAvailableChapter(manga *database.Manga) error {
+func (s *Server) UpdateLatestAvailableChapter(manga *database.Manga) (error, bool) {
 	fmt.Printf("Updating Manga: %s\n", manga.Title)
 
 	l, err := s.Provider.GetChapterList("/title/" + strconv.Itoa(manga.Id))
 	if err != nil {
-		return err
+		return err, false
 	}
 
 	le := len(l)
 	_, c, err := s.Provider.GetTitleAndChapter(l[le-1])
 	if err != nil {
-		return err
+		return err, false
 	}
 
 	chapterNumberStr := strings.Replace(c, "ch_", "", 1)
 
 	i, err := strconv.Atoi(chapterNumberStr)
 	if err != nil {
-		return err
+		return err, false
 	}
 
-	manga.LastChapterNum = i
-	return nil
+	if manga.LastChapterNum == i {
+		return nil, false
+	} else {
+		manga.LastChapterNum = i
+		return nil, true
+	}
 }
 
-func (s *Server) LoadThumbnail(manga *database.Manga) (path string, err error) {
+func (s *Server) LoadThumbnail(manga *database.Manga) (path string, updated bool, err error) {
 	strId := strconv.Itoa(manga.Id)
 
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 	if s.ImageBuffers[strId] != nil {
-		return strId, nil
+		return strId, false, nil
 	}
 
 	if manga.Thumbnail != nil {
 		s.ImageBuffers[strId] = manga.Thumbnail
-		return strId, nil
+		return strId, false, nil
 	}
 
 	url, err := s.Provider.GetThumbnail(strId)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	ram, err := addFileToRam(url)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	manga.Thumbnail = ram
 	s.ImageBuffers[strId] = ram
-	return strId, nil
+	return strId, true, nil
 }
 
 func (s *Server) AppendImagesToBuf(html string) ([]view.Image, error) {

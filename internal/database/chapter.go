@@ -2,61 +2,56 @@ package database
 
 import (
 	"database/sql"
-	"sync"
 )
 
 type Chapter struct {
 	Id            int
-	Manga         *Manga
+	MangaId       int
 	Url           string
 	Name          string
 	Number        int
 	TimeStampUnix int64
 }
 
-type ChapterTable[K comparable] struct {
-	mutex    sync.Mutex
-	chapters map[K]Chapter
-	updated  map[K]DbStatus
-}
-
-func (c *ChapterTable[K]) Get(key K) (Chapter, bool) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	val, ok := c.chapters[key]
-	return val, ok
-}
-
-func (c *ChapterTable[K]) Set(key K, new Chapter) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	val, ok := c.updated[key]
-	if ok && val == Loaded {
-		c.updated[key] = Updated
-	} else {
-		c.updated[key] = New
+func NewChapter(id int, mangaId int, url string, name string, number int, timeStampUnix int64) Chapter {
+	return Chapter{
+		Id:            id,
+		MangaId:       mangaId,
+		Url:           url,
+		Name:          name,
+		Number:        number,
+		TimeStampUnix: timeStampUnix,
 	}
-	c.chapters[key] = new
 }
 
-func (c *ChapterTable[K]) All() []Chapter {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	res := make([]Chapter, len(c.chapters))
-	counter := 0
-	for _, chapter := range c.chapters {
-		res[counter] = chapter
-		counter++
+func updateChapter(db *sql.DB, c *Chapter) error {
+	_, err := db.Exec("UPDATE Chapter set Name = ?, Url = ?, Number = ?, TimeStampUnixEpoch = ? where ID = ?", c.Name, c.Url, c.Number, c.TimeStampUnix, c.Id)
+	return err
+}
+
+func insertChapter(db *sql.DB, c *Chapter) error {
+	_, err := db.Exec("INSERT INTO Chapter(ID, MangaID, Url, Name, Number, TimeStampUnixEpoch) VALUES (?, ?, ?, ?, ?, ?)", c.Id, c.MangaId, c.Url, c.Name, c.Number, c.TimeStampUnix)
+	return err
+}
+
+func loadChapters(db *sql.DB) (map[int]Chapter, error) {
+	rows, err := db.Query("SELECT Id, MangaID, Url, Name, Number, TimeStampUnixEpoch FROM Chapter")
+	if err != nil {
+		return nil, err
 	}
-	return res
+	res := make(map[int]Chapter)
+
+	for rows.Next() {
+		chapter := Chapter{}
+		if err = rows.Scan(&chapter.Id, &chapter.MangaId, &chapter.Url, &chapter.Name, &chapter.Number, &chapter.TimeStampUnix); err != nil {
+			return nil, err
+		}
+		res[chapter.Id] = chapter
+	}
+	return res, err
 }
 
-func (c *ChapterTable[K]) Save(db *sql.DB) error {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (c *ChapterTable[K]) Load(db *sql.DB) error {
-	//TODO implement me
-	panic("implement me")
+func deleteChapter(db *sql.DB, key int) error {
+	_, err := db.Exec("DELETE from Manga where ID = ?", key)
+	return err
 }

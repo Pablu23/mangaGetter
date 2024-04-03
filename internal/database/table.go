@@ -13,16 +13,6 @@ const (
 	Updated
 )
 
-//type Table[K comparable, T any] interface {
-//	Get(key K) (T, bool)
-//	Set(key K, new T)
-//	All() []T
-//	Delete(key K) error
-//	Save(db *sql.DB) error
-//	Load(db *sql.DB) error
-//	Connect(key K, value *any) bool
-//}
-
 type DbTable[K comparable, T any] struct {
 	mutex      sync.Mutex
 	items      map[K]T
@@ -54,14 +44,6 @@ func (d *DbTable[K, T]) Get(key K) (T, bool) {
 	defer d.mutex.Unlock()
 	val, ok := d.items[key]
 	return val, ok
-}
-
-// GetRef unsafe
-func (d *DbTable[K, T]) getRef(key K) (*T, bool) {
-	d.mutex.Lock()
-	defer d.mutex.Unlock()
-	val, ok := d.items[key]
-	return &val, ok
 }
 
 func (d *DbTable[K, T]) Set(key K, new T) {

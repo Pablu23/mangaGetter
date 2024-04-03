@@ -18,6 +18,11 @@
             color: white;
         }
 
+        .white {
+            background-color: white;
+            color: black;
+        }
+
         .button-36 {
             background-image: linear-gradient(92.88deg, #455EB5 9.16%, #5643CC 43.89%, #673FD7 64.72%);
             border-radius: 8px;
@@ -116,17 +121,8 @@
         }
 
     </style>
-    <script>
-        function myFunction(theme) {
-            if (theme !== "white") {
-                var element = document.body;
-                element.classList.toggle(theme);
-            }
-        }
-    </script>
-
 </head>
-<body onload="myFunction({{(index .Settings "theme").Value}})">
+<body class="{{(index .Settings "theme").Value}}">
     <form method="post" action="/new/">
         <label>
             New Sub Url
@@ -138,9 +134,8 @@
     <form method="post" action="/setting/">
         <label for="theme">Theme</label>
         <select onchange="this.form.submit()" id="theme" name="theme">
-            <option value="" selected disabled hidden>Choose Theme</option>
-            <option value="white">White</option>
-            <option value="dark">Dark</option>
+            <option {{if eq (index .Settings "theme").Value "white"}} selected {{end}} value="white">White</option>
+            <option {{if eq (index .Settings "theme").Value "dark"}} selected {{end}} value="dark">Dark</option>
         </select>
         <input type="hidden" name="setting" value="theme">
     </form>
@@ -148,9 +143,9 @@
     <table class="table">
         <tr>
             <th>Thumbnail</th>
-            <th class="table-left"><a href="?sort=title">Title</a></th>
-            <th><a href="?sort=chapter">Current Chapter</a></th>
-            <th><a href="?sort=last">Last Accessed</a></th>
+            <th class="table-left"><a href="setting/set/order/title">Title</a></th>
+            <th><a href="setting/set/order/chapter">Current Chapter</a></th>
+            <th><a href="setting/set/order/last">Last Accessed</a></th>
             <th>Link</th>
             <th>Delete</th>
         </tr>

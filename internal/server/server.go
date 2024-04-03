@@ -59,6 +59,7 @@ func (s *Server) Start(port int) error {
 	http.HandleFunc("POST /delete", s.HandleDelete)
 	http.HandleFunc("/favicon.ico", s.HandleFavicon)
 	http.HandleFunc("POST /setting/", s.HandleSetting)
+	http.HandleFunc("GET /setting/set/{setting}/{value}", s.HandleSettingSet)
 
 	// Update Latest Chapter every 5 Minutes
 	go func(s *Server) {

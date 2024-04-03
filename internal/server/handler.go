@@ -33,7 +33,7 @@ func (s *Server) HandleNew(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/current/", http.StatusTemporaryRedirect)
 }
 
-func (s *Server) HandleMenu(w http.ResponseWriter, r *http.Request) {
+func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 	tmpl := template.Must(view.GetViewTemplate(view.Menu))
 	all := s.DbMgr.Mangas.All()
 	l := len(all)
@@ -108,9 +108,9 @@ func (s *Server) HandleMenu(w http.ResponseWriter, r *http.Request) {
 
 	n = time.Now().UnixNano()
 
-	sort := r.URL.Query().Get("sort")
-
-	if sort == "" || sort == "title" {
+	order, ok := s.DbMgr.Settings.Get("order")
+	sort := order.Value
+	if !ok || sort == "title" {
 		slices.SortStableFunc(mangaViewModels, func(a, b view.MangaViewModel) int {
 			return cmp.Compare(a.Title, b.Title)
 		})
@@ -335,6 +335,23 @@ func (s *Server) HandlePrev(w http.ResponseWriter, r *http.Request) {
 	go s.LoadPrev()
 
 	http.Redirect(w, r, "/current/", http.StatusTemporaryRedirect)
+}
+
+func (s *Server) HandleSettingSet(w http.ResponseWriter, r *http.Request) {
+	settingName := r.PathValue("setting")
+	settingValue := r.PathValue("value")
+
+	setting, ok := s.DbMgr.Settings.Get(settingName)
+	if !ok {
+		s.DbMgr.Settings.Set(settingName, database.NewSetting(settingName, settingValue))
+	} else {
+		if setting.Value != settingValue {
+			setting.Value = settingValue
+			s.DbMgr.Settings.Set(settingName, setting)
+		}
+	}
+
+	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 }
 
 func (s *Server) HandleSetting(w http.ResponseWriter, r *http.Request) {

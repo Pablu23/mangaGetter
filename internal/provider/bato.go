@@ -110,7 +110,7 @@ func (b *Bato) GetTitleIdAndChapterId(url string) (titleId int, chapterId int, e
 }
 
 func (b *Bato) GetChapterList(subUrl string) (subUrls []string, err error) {
-	reg, err := regexp.Compile(`<div class="space-x-1">.*?<a href="(.*?)" .*?>Chapter (\d*)</a>`)
+	reg, err := regexp.Compile(`<div class="space-x-1">.*?<a href="(.*?)" .*?>.*?</a>`)
 	if err != nil {
 		return nil, err
 	}

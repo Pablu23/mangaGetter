@@ -9,11 +9,11 @@ type Chapter struct {
 	MangaId       int
 	Url           string
 	Name          string
-	Number        int
+	Number        string
 	TimeStampUnix int64
 }
 
-func NewChapter(id int, mangaId int, url string, name string, number int, timeStampUnix int64) Chapter {
+func NewChapter(id int, mangaId int, url string, name string, number string, timeStampUnix int64) Chapter {
 	return Chapter{
 		Id:            id,
 		MangaId:       mangaId,
@@ -52,6 +52,6 @@ func loadChapters(db *sql.DB) (map[int]Chapter, error) {
 }
 
 func deleteChapter(db *sql.DB, key int) error {
-	_, err := db.Exec("DELETE from Manga where ID = ?", key)
+	_, err := db.Exec("DELETE from Chapter where ID = ?", key)
 	return err
 }

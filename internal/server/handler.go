@@ -68,7 +68,7 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 
 		// This is very slow
 		// TODO: put this into own Method
-		if manga.LastChapterNum == 0 {
+		if manga.LastChapterNum == "" {
 			err, updated := s.UpdateLatestAvailableChapter(&manga)
 			if err != nil {
 				fmt.Println(err)
@@ -173,6 +173,7 @@ func (s *Server) HandleExit(w http.ResponseWriter, r *http.Request) {
 	err := s.DbMgr.Save()
 	if err != nil {
 		fmt.Println(err)
+		http.Redirect(w, r, "/curr", http.StatusTemporaryRedirect)
 		return
 	}
 
@@ -207,36 +208,30 @@ func (s *Server) HandleCurrent(w http.ResponseWriter, _ *http.Request) {
 	mangaId, chapterId, err := s.Provider.GetTitleIdAndChapterId(s.CurrSubUrl)
 	if err != nil {
 		fmt.Println(err)
-	} else {
-		title, chapterName, err := s.Provider.GetTitleAndChapter(s.CurrSubUrl)
-		if err != nil {
-			fmt.Println(err)
-		} else {
-			manga, ok := s.DbMgr.Mangas.Get(mangaId)
-			if !ok {
-				manga = database.NewManga(mangaId, title, time.Now().Unix())
-			} else {
-				manga.TimeStampUnix = time.Now().Unix()
-			}
-
-			chapter, ok := s.DbMgr.Chapters.Get(chapterId)
-			if !ok {
-				chapterNumberStr := strings.Replace(chapterName, "ch_", "", 1)
-				number, err := strconv.Atoi(chapterNumberStr)
-				if err != nil {
-					fmt.Println(err)
-					number = 0
-				}
-
-				chapter = database.NewChapter(chapterId, manga.Id, s.CurrSubUrl, chapterName, number, time.Now().Unix())
-			} else {
-				chapter.TimeStampUnix = time.Now().Unix()
-			}
-
-			s.DbMgr.Chapters.Set(chapterId, chapter)
-			s.DbMgr.Mangas.Set(mangaId, manga)
-		}
 	}
+
+	title, chapterName, err := s.Provider.GetTitleAndChapter(s.CurrSubUrl)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	manga, ok := s.DbMgr.Mangas.Get(mangaId)
+	if !ok {
+		manga = database.NewManga(mangaId, title, time.Now().Unix())
+	} else {
+		manga.TimeStampUnix = time.Now().Unix()
+	}
+
+	chapter, ok := s.DbMgr.Chapters.Get(chapterId)
+	if !ok {
+		chapterNumberStr := strings.Replace(chapterName, "ch_", "", 1)
+		chapter = database.NewChapter(chapterId, manga.Id, s.CurrSubUrl, chapterName, chapterNumberStr, time.Now().Unix())
+	} else {
+		chapter.TimeStampUnix = time.Now().Unix()
+	}
+
+	s.DbMgr.Chapters.Set(chapterId, chapter)
+	s.DbMgr.Mangas.Set(mangaId, manga)
 
 	err = tmpl.Execute(w, s.CurrViewModel)
 	if err != nil {

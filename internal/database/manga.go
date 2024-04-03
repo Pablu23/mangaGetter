@@ -10,14 +10,15 @@ type Manga struct {
 	Title          string
 	TimeStampUnix  int64
 	Thumbnail      *bytes.Buffer
-	LastChapterNum int
+	LastChapterNum string
 }
 
 func NewManga(id int, title string, timeStampUnix int64) Manga {
 	return Manga{
-		Id:            id,
-		Title:         title,
-		TimeStampUnix: timeStampUnix,
+		Id:             id,
+		Title:          title,
+		TimeStampUnix:  timeStampUnix,
+		LastChapterNum: "",
 	}
 }
 
@@ -43,13 +44,25 @@ func (m *Manga) GetLatestChapter(chapters *DbTable[int, Chapter]) (*Chapter, boo
 
 func updateManga(db *sql.DB, m *Manga) error {
 	const cmd = "UPDATE Manga set Title = ?, TimeStampUnixEpoch = ?, Thumbnail = ?, LatestAvailableChapter = ? WHERE ID = ?"
-	_, err := db.Exec(cmd, m.Title, m.TimeStampUnix, m.Thumbnail.Bytes(), m.LastChapterNum, m.Id)
+	var err error
+	if m.Thumbnail == nil {
+		_, err = db.Exec(cmd, m.Title, m.TimeStampUnix, nil, m.LastChapterNum, m.Id)
+
+	} else {
+		_, err = db.Exec(cmd, m.Title, m.TimeStampUnix, m.Thumbnail.Bytes(), m.LastChapterNum, m.Id)
+	}
 	return err
 }
 
 func insertManga(db *sql.DB, manga *Manga) error {
 	const cmd = "INSERT INTO Manga(ID, Title, TimeStampUnixEpoch, Thumbnail, LatestAvailableChapter) values(?, ?, ?, ?, ?)"
-	_, err := db.Exec(cmd, manga.Id, manga.Title, manga.TimeStampUnix, manga.Thumbnail.Bytes(), manga.LastChapterNum)
+	var err error
+	if manga.Thumbnail == nil {
+		_, err = db.Exec(cmd, manga.Id, manga.Title, manga.TimeStampUnix, nil, manga.LastChapterNum)
+
+	} else {
+		_, err = db.Exec(cmd, manga.Id, manga.Title, manga.TimeStampUnix, manga.Thumbnail.Bytes(), manga.LastChapterNum)
+	}
 	return err
 }
 
@@ -78,6 +91,6 @@ func loadMangas(db *sql.DB) (map[int]Manga, error) {
 }
 
 func deleteManga(db *sql.DB, key int) error {
-	_, err := db.Exec("DELETE from Chapter where ID = ?", key)
+	_, err := db.Exec("DELETE from Manga where ID = ?", key)
 	return err
 }

@@ -15,8 +15,8 @@ type ImageViewModel struct {
 type MangaViewModel struct {
 	ID           int
 	Title        string
-	Number       int
-	LastNumber   int
+	Number       string
+	LastNumber   string
 	LastTime     string
 	Url          string
 	ThumbnailUrl string

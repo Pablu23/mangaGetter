@@ -223,15 +223,10 @@ func (s *Server) UpdateLatestAvailableChapter(manga *database.Manga) (error, boo
 
 	chapterNumberStr := strings.Replace(c, "ch_", "", 1)
 
-	i, err := strconv.Atoi(chapterNumberStr)
-	if err != nil {
-		return err, false
-	}
-
-	if manga.LastChapterNum == i {
+	if manga.LastChapterNum == chapterNumberStr {
 		return nil, false
 	} else {
-		manga.LastChapterNum = i
+		manga.LastChapterNum = chapterNumberStr
 		return nil, true
 	}
 }

@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	"mangaGetter/internal/database"
-	"mangaGetter/internal/provider"
-	"mangaGetter/internal/server"
+	"github.com/pablu23/mangaGetter/internal/database"
+	"github.com/pablu23/mangaGetter/internal/provider"
+	"github.com/pablu23/mangaGetter/internal/server"
 	"os"
 	"os/exec"
 	"os/signal"

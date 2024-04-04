@@ -1,6 +1,6 @@
 package view
 
-import "mangaGetter/internal/database"
+import "github.com/pablu23/mangaGetter/internal/database"
 
 type Image struct {
 	Path  string

@@ -19,14 +19,14 @@ func NewSetting(name string, defaultValue string) Setting {
 }
 
 func initSettings(settings *DbTable[string, Setting]) {
-	addSettingIfNotExists(NewSetting("theme", "white"), settings)
-	addSettingIfNotExists(NewSetting("order", "title"), settings)
+	addSettingIfNotExists("theme", "white", settings)
+	addSettingIfNotExists("order", "title", settings)
 }
 
-func addSettingIfNotExists(setting Setting, settings *DbTable[string, Setting]) {
-	_, exists := settings.Get(setting.Name)
+func addSettingIfNotExists(name string, value string, settings *DbTable[string, Setting]) {
+	_, exists := settings.Get(name)
 	if !exists {
-		settings.Set(setting.Name, setting)
+		settings.Set(name, NewSetting(name, value))
 	}
 }
 

@@ -1,4 +1,4 @@
-module mangaGetter
+module github.com/pablu23/mangaGetter
 
 go 1.22
 

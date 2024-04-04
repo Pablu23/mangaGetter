@@ -58,8 +58,17 @@ func loadSettings(db *sql.DB) (map[string]Setting, error) {
 	return res, err
 }
 
+type IgnoreDeleteError struct{}
+
+func (m IgnoreDeleteError) Error() string {
+	return "Should ignore deletion"
+}
+
 func deleteSetting(db *sql.DB, key string) error {
 	const cmd = "UPDATE Setting set Value = DefaultValue WHERE Name = ?"
 	_, err := db.Exec(cmd, key)
-	return err
+	if err != nil {
+		return err
+	}
+	return IgnoreDeleteError{}
 }

@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	_ "embed"
+	"errors"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -55,7 +56,7 @@ func (dbMgr *Manager) Close() error {
 func (dbMgr *Manager) Delete(mangaId int) error {
 	dbMgr.Mangas.Get(mangaId)
 	err := dbMgr.Mangas.Delete(dbMgr.db, mangaId)
-	if err != nil {
+	if err != nil && !errors.Is(err, IgnoreDeleteError{}) {
 		return err
 	}
 
@@ -63,7 +64,7 @@ func (dbMgr *Manager) Delete(mangaId int) error {
 	for i, chapter := range chapters {
 		if chapter.MangaId == mangaId {
 			err := dbMgr.Chapters.Delete(dbMgr.db, i)
-			if err != nil {
+			if err != nil && !errors.Is(err, IgnoreDeleteError{}) {
 				return err
 			}
 		}

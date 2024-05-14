@@ -21,7 +21,7 @@ type Server struct {
 	CurrViewModel *view.ImageViewModel
 	NextViewModel *view.ImageViewModel
 
-	ImageBuffers map[string]*bytes.Buffer
+	ImageBuffers map[string][]byte
 	Mutex        *sync.Mutex
 
 	NextSubUrl string
@@ -38,7 +38,7 @@ type Server struct {
 
 func New(provider provider.Provider, db *database.Manager) *Server {
 	s := Server{
-		ImageBuffers: make(map[string]*bytes.Buffer),
+		ImageBuffers: make(map[string][]byte),
 		Provider:     provider,
 		DbMgr:        db,
 		Mutex:        &sync.Mutex{},
@@ -61,16 +61,18 @@ func (s *Server) Start(port int) error {
 	http.HandleFunc("POST /setting/", s.HandleSetting)
 	http.HandleFunc("GET /setting/set/{setting}/{value}", s.HandleSettingSet)
 
-	// Update Latest Chapter every 5 Minutes
+	// Update Latest Chapters every 5 Minutes
 	go func(s *Server) {
 		time.AfterFunc(time.Second*10, func() {
-			for _, m := range s.DbMgr.Mangas.All() {
-				err, updated := s.UpdateLatestAvailableChapter(&m)
+			var all []*database.Manga
+			s.DbMgr.Db.Find(&all)
+			for _, m := range all {
+				err, updated := s.UpdateLatestAvailableChapter(m)
 				if err != nil {
 					fmt.Println(err)
 				}
 				if updated {
-					s.DbMgr.Mangas.Set(m.Id, m)
+					s.DbMgr.Db.Save(m)
 				}
 			}
 		})
@@ -78,13 +80,15 @@ func (s *Server) Start(port int) error {
 		for {
 			select {
 			case <-time.After(time.Minute * 5):
-				for _, m := range s.DbMgr.Mangas.All() {
-					err, updated := s.UpdateLatestAvailableChapter(&m)
+				var all []*database.Manga
+				s.DbMgr.Db.Find(&all)
+				for _, m := range all {
+					err, updated := s.UpdateLatestAvailableChapter(m)
 					if err != nil {
 						fmt.Println(err)
 					}
 					if updated {
-						s.DbMgr.Mangas.Set(m.Id, m)
+						s.DbMgr.Db.Save(m)
 					}
 				}
 			}
@@ -287,7 +291,7 @@ func (s *Server) AppendImagesToBuf(html string) ([]view.Image, error) {
 	return images, nil
 }
 
-func addFileToRam(url string) (*bytes.Buffer, error) {
+func addFileToRam(url string) ([]byte, error) {
 	// Get the data
 	resp, err := http.Get(url)
 	if err != nil {
@@ -304,5 +308,5 @@ func addFileToRam(url string) (*bytes.Buffer, error) {
 
 	// Write the body to file
 	_, err = io.Copy(buf, resp.Body)
-	return buf, err
+	return buf.Bytes(), err
 }

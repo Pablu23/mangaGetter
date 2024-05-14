@@ -66,13 +66,7 @@ func open(url string) error {
 
 func Close(db *database.Manager) {
 	fmt.Println("Attempting to save and close DB")
-	err := db.Save()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	err = db.Close()
+	err := db.Close()
 	if err != nil {
 		fmt.Println(err)
 	}

@@ -3,11 +3,13 @@ package server
 import (
 	"cmp"
 	_ "embed"
+	"errors"
 	"fmt"
 	"github.com/pablu23/mangaGetter/internal/database"
 	"github.com/pablu23/mangaGetter/internal/view"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+	"gorm.io/gorm"
 	"html/template"
 	"net/http"
 	"slices"
@@ -35,12 +37,20 @@ func (s *Server) HandleNew(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 	tmpl := template.Must(view.GetViewTemplate(view.Menu))
-	all := s.DbMgr.Mangas.All()
+	var all []*database.Manga
+	_ = s.DbMgr.Db.Preload("Chapters").Find(&all)
 	l := len(all)
 	mangaViewModels := make([]view.MangaViewModel, l)
 	counter := 0
 
 	n := time.Now().UnixNano()
+
+	var tmp []database.Setting
+	s.DbMgr.Db.Find(&tmp)
+	settings := make(map[string]database.Setting)
+	for _, m := range tmp {
+		settings[m.Name] = m
+	}
 
 	var thumbNs int64 = 0
 	var titNs int64 = 0
@@ -51,13 +61,13 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 
 		t1 := time.Now().UnixNano()
 
-		thumbnail, updated, err := s.LoadThumbnail(&manga)
+		thumbnail, updated, err := s.LoadThumbnail(manga)
 		//TODO: Add default picture instead of not showing Manga at all
 		if err != nil {
 			continue
 		}
 		if updated {
-			s.DbMgr.Mangas.Set(manga.Id, manga)
+			s.DbMgr.Db.Save(manga)
 		}
 
 		t2 := time.Now().UnixNano()
@@ -69,12 +79,12 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 		// This is very slow
 		// TODO: put this into own Method
 		if manga.LastChapterNum == "" {
-			err, updated := s.UpdateLatestAvailableChapter(&manga)
+			err, updated := s.UpdateLatestAvailableChapter(manga)
 			if err != nil {
 				fmt.Println(err)
 			}
 			if updated {
-				s.DbMgr.Mangas.Set(manga.Id, manga)
+				s.DbMgr.Db.Save(manga)
 			}
 		}
 
@@ -82,7 +92,7 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 
 		titNs += t2 - t1
 
-		latestChapter, ok := manga.GetLatestChapter(&s.DbMgr.Chapters)
+		latestChapter, ok := manga.GetLatestChapter()
 		if !ok {
 			continue
 		}
@@ -101,24 +111,23 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	fmt.Printf("Loading Thumbnails took %d ms\n", (thumbNs)/1000000)
-	fmt.Printf("Loading latest Chapter took %d ms\n", (titNs)/1000000)
+	fmt.Printf("Loading latest Chapters took %d ms\n", (titNs)/1000000)
 
 	nex := time.Now().UnixNano()
 	fmt.Printf("Creating Viewmodels took %d ms\n", (nex-n)/1000000)
 
 	n = time.Now().UnixNano()
 
-	order, ok := s.DbMgr.Settings.Get("order")
-	sort := order.Value
-	if !ok || sort == "title" {
+	order, ok := settings["order"]
+	if !ok || order.Value == "title" {
 		slices.SortStableFunc(mangaViewModels, func(a, b view.MangaViewModel) int {
 			return cmp.Compare(a.Title, b.Title)
 		})
-	} else if sort == "chapter" {
+	} else if order.Value == "chapter" {
 		slices.SortStableFunc(mangaViewModels, func(a, b view.MangaViewModel) int {
 			return cmp.Compare(b.Number, a.Number)
 		})
-	} else if sort == "last" {
+	} else if order.Value == "last" {
 		slices.SortStableFunc(mangaViewModels, func(a, b view.MangaViewModel) int {
 			aT, err := time.Parse("15:04 (02-01-06)", a.LastTime)
 			if err != nil {
@@ -136,7 +145,7 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 	fmt.Printf("Sorting took %d ms\n", (nex-n)/1000000)
 
 	menuViewModel := view.MenuViewModel{
-		Settings: s.DbMgr.Settings.Map(),
+		Settings: settings,
 		Mangas:   mangaViewModels,
 	}
 
@@ -161,22 +170,12 @@ func (s *Server) HandleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s.DbMgr.Delete(mangaId)
-	if err != nil {
-		fmt.Println(err)
-	}
+	s.DbMgr.Delete(mangaId)
 
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 }
 
 func (s *Server) HandleExit(w http.ResponseWriter, r *http.Request) {
-	err := s.DbMgr.Save()
-	if err != nil {
-		fmt.Println(err)
-		http.Redirect(w, r, "/curr", http.StatusTemporaryRedirect)
-		return
-	}
-
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 
 	go func() {
@@ -215,23 +214,25 @@ func (s *Server) HandleCurrent(w http.ResponseWriter, _ *http.Request) {
 		fmt.Println(err)
 	}
 
-	manga, ok := s.DbMgr.Mangas.Get(mangaId)
-	if !ok {
+	var manga database.Manga
+	result := s.DbMgr.Db.First(&manga, mangaId)
+	if result.Error != nil && errors.Is(result.Error, gorm.ErrRecordNotFound) {
 		manga = database.NewManga(mangaId, title, time.Now().Unix())
 	} else {
 		manga.TimeStampUnix = time.Now().Unix()
 	}
 
-	chapter, ok := s.DbMgr.Chapters.Get(chapterId)
-	if !ok {
+	var chapter database.Chapter
+	result = s.DbMgr.Db.First(&chapter, chapterId)
+	if result.Error != nil && errors.Is(result.Error, gorm.ErrRecordNotFound) {
 		chapterNumberStr := strings.Replace(chapterName, "ch_", "", 1)
-		chapter = database.NewChapter(chapterId, manga.Id, s.CurrSubUrl, chapterName, chapterNumberStr, time.Now().Unix())
+		chapter = database.NewChapter(chapterId, mangaId, s.CurrSubUrl, chapterName, chapterNumberStr, time.Now().Unix())
 	} else {
 		chapter.TimeStampUnix = time.Now().Unix()
 	}
 
-	s.DbMgr.Chapters.Set(chapterId, chapter)
-	s.DbMgr.Mangas.Set(mangaId, manga)
+	s.DbMgr.Db.Save(&manga)
+	s.DbMgr.Db.Save(&chapter)
 
 	err = tmpl.Execute(w, s.CurrViewModel)
 	if err != nil {
@@ -251,7 +252,7 @@ func (s *Server) HandleImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "image/webp")
-	_, err := w.Write(buf.Bytes())
+	_, err := w.Write(buf)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -284,10 +285,6 @@ func (s *Server) HandleNext(w http.ResponseWriter, r *http.Request) {
 
 	if s.NextViewModel == nil || s.NextSubUrl == "" {
 		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-		err := s.DbMgr.Save()
-		if err != nil {
-			fmt.Println(err)
-		}
 		return
 	}
 
@@ -315,10 +312,6 @@ func (s *Server) HandlePrev(w http.ResponseWriter, r *http.Request) {
 
 	if s.PrevViewModel == nil || s.PrevSubUrl == "" {
 		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-		err := s.DbMgr.Save()
-		if err != nil {
-			fmt.Println(err)
-		}
 		return
 	}
 
@@ -336,14 +329,14 @@ func (s *Server) HandleSettingSet(w http.ResponseWriter, r *http.Request) {
 	settingName := r.PathValue("setting")
 	settingValue := r.PathValue("value")
 
-	setting, ok := s.DbMgr.Settings.Get(settingName)
-	if !ok {
-		s.DbMgr.Settings.Set(settingName, database.NewSetting(settingName, settingValue))
+	var setting database.Setting
+	res := s.DbMgr.Db.First(&setting, "name = ?", settingName)
+
+	if res.Error != nil && errors.Is(res.Error, gorm.ErrRecordNotFound) {
+		set := database.NewSetting(settingName, settingValue)
+		s.DbMgr.Db.Save(&set)
 	} else {
-		if setting.Value != settingValue {
-			setting.Value = settingValue
-			s.DbMgr.Settings.Set(settingName, setting)
-		}
+		s.DbMgr.Db.Model(&setting).Update("value", settingValue)
 	}
 
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
@@ -353,14 +346,14 @@ func (s *Server) HandleSetting(w http.ResponseWriter, r *http.Request) {
 	settingName := r.PostFormValue("setting")
 	settingValue := r.PostFormValue(settingName)
 
-	setting, ok := s.DbMgr.Settings.Get(settingName)
-	if !ok {
-		s.DbMgr.Settings.Set(settingName, database.NewSetting(settingName, settingValue))
+	var setting database.Setting
+	res := s.DbMgr.Db.First(&setting, "name = ?", settingName)
+
+	if res.Error != nil && errors.Is(res.Error, gorm.ErrRecordNotFound) {
+		set := database.NewSetting(settingName, settingValue)
+		s.DbMgr.Db.Save(&set)
 	} else {
-		if setting.Value != settingValue {
-			setting.Value = settingValue
-			s.DbMgr.Settings.Set(settingName, setting)
-		}
+		s.DbMgr.Db.Model(&setting).Update("value", settingValue)
 	}
 
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)

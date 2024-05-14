@@ -3,5 +3,6 @@ findings.txt
 test.txt
 h.html
 *.sqlite
+*.bak
 /bin
 *.exe

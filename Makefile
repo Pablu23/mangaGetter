@@ -2,10 +2,8 @@ run: develop
 	bin/develop
 
 develop:
-	go build -tags Develop -o bin/develop ./cmd/mangaGetter/
-
+	go build -tags Develop -o bin/develop 
 release:
-	go build -o bin/MangaGetter_unix ./cmd/mangaGetter/
-
+	go build -o bin/MangaGetter_unix 
 win-amd64:
-	GOOS=windows GOARCH=amd64 go build -o bin/MangaGetter-amd64_windows.exe ./cmd/mangaGetter/
+	GOOS=windows GOARCH=amd64 go build -o bin/MangaGetter-amd64_windows.exe 

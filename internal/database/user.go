@@ -6,7 +6,6 @@ type User struct {
 	LoginName   string
 	PwdHash     []byte
 	Salt        []byte
-	Mangas      []Manga `gorm:"foreignKey:UserId"`
 }
 
 // type UserManga struct {

@@ -3,7 +3,6 @@ package database
 type MangaDefinition struct {
 	Id             int `gorm:"primary_key;AUTO_INCREMENT"`
 	Title          string
-	TimeStampUnix  int64
 	Thumbnail      []byte
 	LastChapterNum string
 	// Chapters       []Chapter
@@ -13,19 +12,29 @@ type MangaDefinition struct {
 type Manga struct {
 	Id                int `gorm:"primary_key;AUTO_INCREMENT"`
 	MangaDefinitionId int
-  Definition        MangaDefinition `gorm:"foreignKey:MangaDefinitionId"`
+	Definition        MangaDefinition `gorm:"foreignKey:MangaDefinitionId"`
 	UserId            int
+	User              User
 	TimeStampUnix     int64
 	Chapters          []Chapter `gorm:"foreignKey:MangaId"`
 }
 
-func NewMangaDefinition(id int, title string, timeStampUnix int64) MangaDefinition {
+func NewMangaDefinition(id int, title string) MangaDefinition {
 	return MangaDefinition{
 		Id:             id,
 		Title:          title,
-		TimeStampUnix:  timeStampUnix,
 		LastChapterNum: "",
 	}
+}
+
+func NewManga(def MangaDefinition, user User, timeStampUnix int64) Manga {
+  return Manga{
+  	MangaDefinitionId: def.Id,
+  	Definition:        def,
+  	UserId:            user.Id,
+  	User:              user,
+  	TimeStampUnix:     timeStampUnix,
+  }
 }
 
 // GetLatestChapter TODO: Cache this somehow

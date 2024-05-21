@@ -8,9 +8,10 @@ type Chapter struct {
 	Number        string
 	TimeStampUnix int64
 	MangaId       int
+	UserId        int
 }
 
-func NewChapter(id int, mangaId int, url string, name string, number string, timeStampUnix int64) Chapter {
+func NewChapter(id int, mangaId int, userId int, url string, name string, number string, timeStampUnix int64) Chapter {
 	return Chapter{
 		ChapterId:     id,
 		Url:           url,
@@ -18,5 +19,6 @@ func NewChapter(id int, mangaId int, url string, name string, number string, tim
 		Number:        number,
 		TimeStampUnix: timeStampUnix,
 		MangaId:       mangaId,
+    UserId: userId,
 	}
 }

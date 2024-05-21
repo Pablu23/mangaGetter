@@ -4,50 +4,57 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
-	"github.com/pablu23/mangaGetter/internal/database"
-	"github.com/pablu23/mangaGetter/internal/provider"
-	"github.com/pablu23/mangaGetter/internal/view"
 	"io"
 	"net/http"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
+
+	"github.com/pablu23/mangaGetter/internal/database"
+	"github.com/pablu23/mangaGetter/internal/provider"
+	"github.com/pablu23/mangaGetter/internal/view"
 )
 
 type Server struct {
+	ImageBuffers map[string][]byte
+	Provider     provider.Provider
+	DbMgr        *database.Manager
+
+	Mutex *sync.RWMutex
+
+	Sessions map[string]*UserSession
+}
+
+type UserSession struct {
+	User database.User
+
+	// Mutex *sync.Mutex
+
+	PrevSubUrl string
+	CurrSubUrl string
+	NextSubUrl string
+
 	PrevViewModel *view.ImageViewModel
 	CurrViewModel *view.ImageViewModel
 	NextViewModel *view.ImageViewModel
-
-	ImageBuffers map[string][]byte
-	Mutex        *sync.Mutex
-
-	NextSubUrl string
-	CurrSubUrl string
-	PrevSubUrl string
-
-	Provider provider.Provider
-
-	IsFirst bool
-	IsLast  bool
-
-	DbMgr *database.Manager
 }
 
 func New(provider provider.Provider, db *database.Manager) *Server {
 	s := Server{
 		ImageBuffers: make(map[string][]byte),
+		Sessions:     make(map[string]*UserSession),
 		Provider:     provider,
 		DbMgr:        db,
-		Mutex:        &sync.Mutex{},
+		Mutex:        &sync.RWMutex{},
 	}
 
 	return &s
 }
 
 func (s *Server) Start(port int) error {
+	http.HandleFunc("/register", s.HandleRegister)
+	http.HandleFunc("/login", s.HandleLogin)
 	http.HandleFunc("/", s.HandleMenu)
 	http.HandleFunc("/new/", s.HandleNewQuery)
 	http.HandleFunc("/new/title/{title}/{chapter}", s.HandleNew)
@@ -62,74 +69,66 @@ func (s *Server) Start(port int) error {
 	http.HandleFunc("GET /setting/set/{setting}/{value}", s.HandleSettingSet)
 
 	// Update Latest Chapters every 5 Minutes
-	go func(s *Server) {
-		time.AfterFunc(time.Second*10, func() {
-			var all []*database.Manga
-			s.DbMgr.Db.Find(&all)
-			for _, m := range all {
-				err, updated := s.UpdateLatestAvailableChapter(m)
-				if err != nil {
-					fmt.Println(err)
-				}
-				if updated {
-					s.DbMgr.Db.Save(m)
-				}
-			}
-		})
-
-		for {
-			select {
-			case <-time.After(time.Minute * 5):
-				var all []*database.Manga
-				s.DbMgr.Db.Find(&all)
-				for _, m := range all {
-					err, updated := s.UpdateLatestAvailableChapter(m)
-					if err != nil {
-						fmt.Println(err)
-					}
-					if updated {
-						s.DbMgr.Db.Save(m)
-					}
-				}
-			}
-		}
-	}(s)
-
+	// go func(s *Server) {
+	// 	time.AfterFunc(time.Second*10, func() {
+	// 		var all []*database.Manga
+	// 		s.DbMgr.Db.Find(&all)
+	// 		for _, m := range all {
+	// 			err, updated := s.UpdateLatestAvailableChapter(m)
+	// 			if err != nil {
+	// 				fmt.Println(err)
+	// 			}
+	// 			if updated {
+	// 				s.DbMgr.Db.Save(m)
+	// 			}
+	// 		}
+	// 	})
+	//
+	// 	for {
+	// 		select {
+	// 		case <-time.After(time.Minute * 5):
+	// 			var all []*database.Manga
+	// 			s.DbMgr.Db.Find(&all)
+	// 			for _, m := range all {
+	// 				err, updated := s.UpdateLatestAvailableChapter(m)
+	// 				if err != nil {
+	// 					fmt.Println(err)
+	// 				}
+	// 				if updated {
+	// 					s.DbMgr.Db.Save(m)
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	// }(s)
+	//
 	fmt.Println("Server starting...")
 	err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 	return err
 }
 
-func (s *Server) LoadNext() {
-	c, err := s.Provider.GetHtml(s.CurrSubUrl)
+func (s *Server) LoadNext(session *UserSession) {
+	next, err := s.Provider.GetHtml(session.CurrSubUrl)
 	if err != nil {
 		fmt.Println(err)
-		s.NextSubUrl = ""
-		s.NextViewModel = nil
-		return
-	}
-
-	next, err := s.Provider.GetNext(c)
-	if err != nil {
-		fmt.Println(err)
-		s.NextSubUrl = ""
-		s.NextViewModel = nil
+		session.NextSubUrl = ""
+		session.NextViewModel = nil
 		return
 	}
 
 	html, err := s.Provider.GetHtml(next)
 	if err != nil {
 		fmt.Println(err)
-		s.NextSubUrl = ""
-		s.NextViewModel = nil
+		session.NextSubUrl = ""
+		session.NextViewModel = nil
 		return
 	}
 
 	imagesNext, err := s.AppendImagesToBuf(html)
 	if err != nil {
 		fmt.Println(err)
-		s.NextSubUrl = ""
-		s.NextViewModel = nil
+		session.NextSubUrl = ""
+		session.NextViewModel = nil
 		return
 	}
 
@@ -141,39 +140,39 @@ func (s *Server) LoadNext() {
 
 	full := strings.Replace(title, "-", " ", -1) + " - " + strings.Replace(chapter, "_", " ", -1)
 
-	s.NextViewModel = &view.ImageViewModel{Images: imagesNext, Title: full}
-	s.NextSubUrl = next
+	session.NextViewModel = &view.ImageViewModel{Images: imagesNext, Title: full}
+	session.NextSubUrl = next
 	fmt.Println("Loaded next")
 }
 
-func (s *Server) LoadPrev() {
-	c, err := s.Provider.GetHtml(s.CurrSubUrl)
+func (s *Server) LoadPrev(session *UserSession) {
+	c, err := s.Provider.GetHtml(session.CurrSubUrl)
 	if err != nil {
 		fmt.Println(err)
-		s.PrevSubUrl = ""
-		s.PrevViewModel = nil
+		session.PrevSubUrl = ""
+		session.PrevViewModel = nil
 		return
 	}
 	prev, err := s.Provider.GetPrev(c)
 	if err != nil {
 		fmt.Println(err)
-		s.PrevSubUrl = ""
-		s.PrevViewModel = nil
+		session.PrevSubUrl = ""
+		session.PrevViewModel = nil
 		return
 	}
 	html, err := s.Provider.GetHtml(prev)
 	if err != nil {
 		fmt.Println(err)
-		s.PrevSubUrl = ""
-		s.PrevViewModel = nil
+		session.PrevSubUrl = ""
+		session.PrevViewModel = nil
 		return
 	}
 
 	imagesNext, err := s.AppendImagesToBuf(html)
 	if err != nil {
 		fmt.Println(err)
-		s.PrevSubUrl = ""
-		s.PrevViewModel = nil
+		session.PrevSubUrl = ""
+		session.PrevViewModel = nil
 		return
 	}
 
@@ -185,21 +184,21 @@ func (s *Server) LoadPrev() {
 
 	full := strings.Replace(title, "-", " ", -1) + " - " + strings.Replace(chapter, "_", " ", -1)
 
-	s.PrevViewModel = &view.ImageViewModel{Images: imagesNext, Title: full}
+	session.PrevViewModel = &view.ImageViewModel{Images: imagesNext, Title: full}
 
-	s.PrevSubUrl = prev
+	session.PrevSubUrl = prev
 	fmt.Println("Loaded prev")
 }
 
-func (s *Server) LoadCurr() {
-	html, err := s.Provider.GetHtml(s.CurrSubUrl)
+func (s *Server) LoadCurr(session *UserSession) {
+	html, err := s.Provider.GetHtml(session.CurrSubUrl)
 	if err != nil {
 		panic(err)
 	}
 
 	imagesCurr, err := s.AppendImagesToBuf(html)
 
-	title, chapter, err := s.Provider.GetTitleAndChapter(s.CurrSubUrl)
+	title, chapter, err := s.Provider.GetTitleAndChapter(session.CurrSubUrl)
 	if err != nil {
 		title = "Unknown"
 		chapter = "ch_?"
@@ -207,7 +206,7 @@ func (s *Server) LoadCurr() {
 
 	full := strings.Replace(title, "-", " ", -1) + " - " + strings.Replace(chapter, "_", " ", -1)
 
-	s.CurrViewModel = &view.ImageViewModel{Images: imagesCurr, Title: full}
+	session.CurrViewModel = &view.ImageViewModel{Images: imagesCurr, Title: full}
 	fmt.Println("Loaded current")
 }
 

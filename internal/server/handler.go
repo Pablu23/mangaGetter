@@ -5,18 +5,80 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
-	"github.com/pablu23/mangaGetter/internal/database"
-	"github.com/pablu23/mangaGetter/internal/view"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
-	"gorm.io/gorm"
 	"html/template"
 	"net/http"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pablu23/mangaGetter/internal/database"
+	"github.com/pablu23/mangaGetter/internal/view"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+	"gorm.io/gorm"
 )
+
+func (s *Server) getSessionFromCookie(w http.ResponseWriter, r *http.Request) (*UserSession, error) {
+	cookie, err := r.Cookie("session")
+	if err != nil {
+		switch {
+		case errors.Is(err, http.ErrNoCookie):
+			// http.Error(w, "cookie not found", http.StatusBadRequest)
+			http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
+		default:
+			fmt.Println(err)
+			http.Error(w, "server error", http.StatusInternalServerError)
+		}
+	}
+	session, ok := s.Sessions[cookie.Value]
+	if !ok {
+		http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
+		return nil, errors.New("Unknown Session")
+	}
+	return session, err
+}
+
+func (s *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+
+	admin := database.User{
+		Id:          1,
+		DisplayName: "admin",
+		LoginName:   "admin",
+	}
+	s.DbMgr.Db.Create(&admin)
+
+	http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
+}
+
+func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+
+	// Login
+	s.Sessions["abcd"] = &UserSession{
+		User: database.User{
+			Id:          1,
+			DisplayName: "admin",
+			LoginName:   "admin",
+		},
+	}
+
+	cookie := http.Cookie{
+		Name:     "session",
+		Value:    "abcd",
+		Path:     "/",
+		MaxAge:   3600,
+		Secure:   true,
+		HttpOnly: false,
+		SameSite: http.SameSiteLaxMode,
+	}
+
+	http.SetCookie(w, &cookie)
+	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+}
 
 func (s *Server) HandleNew(w http.ResponseWriter, r *http.Request) {
 	title := r.PathValue("title")
@@ -24,21 +86,31 @@ func (s *Server) HandleNew(w http.ResponseWriter, r *http.Request) {
 
 	url := fmt.Sprintf("/title/%s/%s", title, chapter)
 
-	s.CurrSubUrl = url
-	s.PrevSubUrl = ""
-	s.NextSubUrl = ""
-	s.LoadCurr()
+	session, err := s.getSessionFromCookie(w, r)
+	if err != nil {
+		return
+	}
 
-	go s.LoadNext()
-	go s.LoadPrev()
+	session.CurrSubUrl = url
+	session.PrevSubUrl = ""
+	session.NextSubUrl = ""
+	s.LoadCurr(session)
+
+	go s.LoadNext(session)
+	go s.LoadPrev(session)
 
 	http.Redirect(w, r, "/current/", http.StatusTemporaryRedirect)
 }
 
-func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) HandleMenu(w http.ResponseWriter, r *http.Request) {
 	tmpl := template.Must(view.GetViewTemplate(view.Menu))
+
+	session, err := s.getSessionFromCookie(w, r)
+	if err != nil {
+		return
+	}
 	var all []*database.Manga
-	_ = s.DbMgr.Db.Preload("Chapters").Where("user_id = ?", 1).Find(&all)
+	_ = s.DbMgr.Db.Preload("Chapters").Where("user_id = ?", session.User.Id).Find(&all)
 	l := len(all)
 	mangaViewModels := make([]view.MangaViewModel, l)
 	counter := 0
@@ -148,7 +220,7 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 		Mangas:   mangaViewModels,
 	}
 
-	err := tmpl.Execute(w, menuViewModel)
+	err = tmpl.Execute(w, menuViewModel)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -177,63 +249,77 @@ func (s *Server) HandleDelete(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleExit(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 
+	// session, err := s.getSessionFromCookie(w, r)
+	// if err != nil {
+	// 	return
+	// }
+
 	go func() {
-		s.Mutex.Lock()
-		if s.PrevViewModel != nil {
-			for _, img := range s.PrevViewModel.Images {
-				delete(s.ImageBuffers, img.Path)
-			}
-		}
-		if s.CurrViewModel != nil {
-
-			for _, img := range s.CurrViewModel.Images {
-				delete(s.ImageBuffers, img.Path)
-			}
-		}
-		if s.NextViewModel != nil {
-
-			for _, img := range s.NextViewModel.Images {
-				delete(s.ImageBuffers, img.Path)
-			}
-		}
-		s.Mutex.Unlock()
+		// session.Mutex.Lock()
+		// if session.PrevViewModel != nil {
+		// 	for _, img := range session.PrevViewModel.Images {
+		// 		delete(s.ImageBuffers, img.Path)
+		// 	}
+		// }
+		// if session.CurrViewModel != nil {
+		//
+		// 	for _, img := range session.CurrViewModel.Images {
+		// 		delete(s.ImageBuffers, img.Path)
+		// 	}
+		// }
+		// if session.NextViewModel != nil {
+		//
+		// 	for _, img := range session.NextViewModel.Images {
+		// 		delete(s.ImageBuffers, img.Path)
+		// 	}
+		// }
+		// session.Mutex.Unlock()
 		fmt.Println("Cleaned last Manga")
 	}()
 }
 
-func (s *Server) HandleCurrent(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) HandleCurrent(w http.ResponseWriter, r *http.Request) {
 	tmpl := template.Must(view.GetViewTemplate(view.Viewer))
-	mangaId, chapterId, err := s.Provider.GetTitleIdAndChapterId(s.CurrSubUrl)
+	session, err := s.getSessionFromCookie(w, r)
+	if err != nil {
+		return
+	}
+	mangaId, chapterId, err := s.Provider.GetTitleIdAndChapterId(session.CurrSubUrl)
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	title, chapterName, err := s.Provider.GetTitleAndChapter(s.CurrSubUrl)
+	title, chapterName, err := s.Provider.GetTitleAndChapter(session.CurrSubUrl)
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	var manga database.MangaDefinition
-	result := s.DbMgr.Db.First(&manga, mangaId)
+	var mangaDef database.MangaDefinition
+	result := s.DbMgr.Db.First(&mangaDef, mangaId)
 	if result.Error != nil && errors.Is(result.Error, gorm.ErrRecordNotFound) {
-		manga = database.NewMangaDefinition(mangaId, title, time.Now().Unix())
-	} else {
-		manga.TimeStampUnix = time.Now().Unix()
+		mangaDef = database.NewMangaDefinition(mangaId, title)
+	}
+
+	var manga database.Manga
+	result = s.DbMgr.Db.Where("user_id = ?", session.User.Id).First(&manga, "manga_definition_id = ?", mangaId)
+	if result.Error != nil && errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		manga = database.NewManga(mangaDef, session.User, time.Now().Unix())
 	}
 
 	var chapter database.Chapter
-	result = s.DbMgr.Db.First(&chapter, chapterId)
+	result = s.DbMgr.Db.Where("user_id = ?", session.User.Id).First(&chapter, "chapter_id = ?", chapterId)
 	if result.Error != nil && errors.Is(result.Error, gorm.ErrRecordNotFound) {
 		chapterNumberStr := strings.Replace(chapterName, "ch_", "", 1)
-		chapter = database.NewChapter(chapterId, mangaId, s.CurrSubUrl, chapterName, chapterNumberStr, time.Now().Unix())
+		chapter = database.NewChapter(chapterId, mangaId, session.User.Id, session.CurrSubUrl, chapterName, chapterNumberStr, time.Now().Unix())
 	} else {
 		chapter.TimeStampUnix = time.Now().Unix()
 	}
 
+  s.DbMgr.Db.Save(&mangaDef)
 	s.DbMgr.Db.Save(&manga)
 	s.DbMgr.Db.Save(&chapter)
 
-	err = tmpl.Execute(w, s.CurrViewModel)
+	err = tmpl.Execute(w, session.CurrViewModel)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -241,8 +327,8 @@ func (s *Server) HandleCurrent(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) HandleImage(w http.ResponseWriter, r *http.Request) {
 	u := r.PathValue("url")
-	s.Mutex.Lock()
-	defer s.Mutex.Unlock()
+	s.Mutex.RLock()
+	defer s.Mutex.RUnlock()
 	buf := s.ImageBuffers[u]
 	if buf == nil {
 		fmt.Printf("url: %s is nil\n", u)
@@ -271,7 +357,12 @@ func (s *Server) HandleFavicon(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) HandleNext(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Received Next")
 
-	if s.PrevViewModel != nil {
+	session, err := s.getSessionFromCookie(w, r)
+	if err != nil {
+		return
+	}
+
+	if session.PrevViewModel != nil {
 		go func(viewModel view.ImageViewModel, s *Server) {
 			s.Mutex.Lock()
 			for _, img := range viewModel.Images {
@@ -279,26 +370,31 @@ func (s *Server) HandleNext(w http.ResponseWriter, r *http.Request) {
 			}
 			s.Mutex.Unlock()
 			fmt.Println("Cleaned out of scope Last")
-		}(*s.PrevViewModel, s)
+		}(*session.PrevViewModel, s)
 	}
 
-	if s.NextViewModel == nil || s.NextSubUrl == "" {
+	if session.NextViewModel == nil || session.NextSubUrl == "" {
 		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 		return
 	}
 
-	s.PrevViewModel = s.CurrViewModel
-	s.CurrViewModel = s.NextViewModel
-	s.PrevSubUrl = s.CurrSubUrl
-	s.CurrSubUrl = s.NextSubUrl
+	session.PrevViewModel = session.CurrViewModel
+	session.CurrViewModel = session.NextViewModel
+	session.PrevSubUrl = session.CurrSubUrl
+	session.CurrSubUrl = session.NextSubUrl
 
-	go s.LoadNext()
+	go s.LoadNext(session)
 
 	http.Redirect(w, r, "/current/", http.StatusTemporaryRedirect)
 }
 func (s *Server) HandlePrev(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Received Prev")
-	if s.NextViewModel != nil {
+
+	session, err := s.getSessionFromCookie(w, r)
+	if err != nil {
+		return
+	}
+	if session.NextViewModel != nil {
 		go func(viewModel view.ImageViewModel, s *Server) {
 			s.Mutex.Lock()
 			for _, img := range viewModel.Images {
@@ -306,20 +402,20 @@ func (s *Server) HandlePrev(w http.ResponseWriter, r *http.Request) {
 			}
 			s.Mutex.Unlock()
 			fmt.Println("Cleaned out of scope Last")
-		}(*s.NextViewModel, s)
+		}(*session.NextViewModel, s)
 	}
 
-	if s.PrevViewModel == nil || s.PrevSubUrl == "" {
+	if session.PrevViewModel == nil || session.PrevSubUrl == "" {
 		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 		return
 	}
 
-	s.NextViewModel = s.CurrViewModel
-	s.CurrViewModel = s.PrevViewModel
-	s.NextSubUrl = s.CurrSubUrl
-	s.CurrSubUrl = s.PrevSubUrl
+	session.NextViewModel = session.CurrViewModel
+	session.CurrViewModel = session.PrevViewModel
+	session.NextSubUrl = session.CurrSubUrl
+	session.CurrSubUrl = session.PrevSubUrl
 
-	go s.LoadPrev()
+	go s.LoadPrev(session)
 
 	http.Redirect(w, r, "/current/", http.StatusTemporaryRedirect)
 }
@@ -363,13 +459,17 @@ func (s *Server) HandleNewQuery(w http.ResponseWriter, r *http.Request) {
 
 	url := fmt.Sprintf("/title/%s", sub)
 
-	s.CurrSubUrl = url
-	s.PrevSubUrl = ""
-	s.NextSubUrl = ""
-	s.LoadCurr()
+	session, err := s.getSessionFromCookie(w, r)
+	if err != nil {
+		return
+	}
+	session.CurrSubUrl = url
+	session.PrevSubUrl = ""
+	session.NextSubUrl = ""
+	s.LoadCurr(session)
 
-	go s.LoadNext()
-	go s.LoadPrev()
+	go s.LoadNext(session)
+	go s.LoadPrev(session)
 
 	http.Redirect(w, r, "/current/", http.StatusTemporaryRedirect)
 }

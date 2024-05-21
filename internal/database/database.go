@@ -54,6 +54,6 @@ func (dbMgr *Manager) Delete(mangaId int) {
 }
 
 func (dbMgr *Manager) createDatabaseIfNotExists() error {
-	err := dbMgr.Db.AutoMigrate(&Manga{}, &Chapter{}, &Setting{})
+	err := dbMgr.Db.AutoMigrate(&MangaDefinition{}, &User{}, &Manga{}, &Chapter{}, &Setting{})
 	return err
 }

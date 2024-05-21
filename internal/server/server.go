@@ -212,9 +212,9 @@ func (s *Server) LoadCurr() {
 }
 
 func (s *Server) UpdateLatestAvailableChapter(manga *database.Manga) (error, bool) {
-	fmt.Printf("Updating Manga: %s\n", manga.Title)
+	fmt.Printf("Updating Manga: %s\n", manga.Definition.Title)
 
-	l, err := s.Provider.GetChapterList("/title/" + strconv.Itoa(manga.Id))
+	l, err := s.Provider.GetChapterList("/title/" + strconv.Itoa(manga.Definition.Id))
 	if err != nil {
 		return err, false
 	}
@@ -227,16 +227,16 @@ func (s *Server) UpdateLatestAvailableChapter(manga *database.Manga) (error, boo
 
 	chapterNumberStr := strings.Replace(c, "ch_", "", 1)
 
-	if manga.LastChapterNum == chapterNumberStr {
+	if manga.Definition.LastChapterNum == chapterNumberStr {
 		return nil, false
 	} else {
-		manga.LastChapterNum = chapterNumberStr
+		manga.Definition.LastChapterNum = chapterNumberStr
 		return nil, true
 	}
 }
 
 func (s *Server) LoadThumbnail(manga *database.Manga) (path string, updated bool, err error) {
-	strId := strconv.Itoa(manga.Id)
+	strId := strconv.Itoa(manga.Definition.Id)
 
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
@@ -244,8 +244,8 @@ func (s *Server) LoadThumbnail(manga *database.Manga) (path string, updated bool
 		return strId, false, nil
 	}
 
-	if manga.Thumbnail != nil {
-		s.ImageBuffers[strId] = manga.Thumbnail
+	if manga.Definition.Thumbnail != nil {
+		s.ImageBuffers[strId] = manga.Definition.Thumbnail
 		return strId, false, nil
 	}
 
@@ -257,7 +257,7 @@ func (s *Server) LoadThumbnail(manga *database.Manga) (path string, updated bool
 	if err != nil {
 		return "", false, err
 	}
-	manga.Thumbnail = ram
+	manga.Definition.Thumbnail = ram
 	s.ImageBuffers[strId] = ram
 	return strId, true, nil
 }

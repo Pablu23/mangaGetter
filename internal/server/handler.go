@@ -38,7 +38,7 @@ func (s *Server) HandleNew(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 	tmpl := template.Must(view.GetViewTemplate(view.Menu))
 	var all []*database.Manga
-	_ = s.DbMgr.Db.Preload("Chapters").Find(&all)
+	_ = s.DbMgr.Db.Preload("Chapters").Where("user_id = ?", 1).Find(&all)
 	l := len(all)
 	mangaViewModels := make([]view.MangaViewModel, l)
 	counter := 0
@@ -57,7 +57,7 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 
 	//TODO: Change all this to be more performant
 	for _, manga := range all {
-		title := cases.Title(language.English, cases.Compact).String(strings.Replace(manga.Title, "-", " ", -1))
+		title := cases.Title(language.English, cases.Compact).String(strings.Replace(manga.Definition.Title, "-", " ", -1))
 
 		t1 := time.Now().UnixNano()
 
@@ -78,30 +78,29 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 
 		// This is very slow
 		// TODO: put this into own Method
-		if manga.LastChapterNum == "" {
+		if manga.Definition.LastChapterNum == "" {
 			err, updated := s.UpdateLatestAvailableChapter(manga)
 			if err != nil {
 				fmt.Println(err)
 			}
 			if updated {
-				s.DbMgr.Db.Save(manga)
+				s.DbMgr.Db.Save(manga.Definition)
 			}
 		}
 
 		t2 = time.Now().UnixNano()
 
 		titNs += t2 - t1
-
 		latestChapter, ok := manga.GetLatestChapter()
 		if !ok {
 			continue
 		}
 
 		mangaViewModels[counter] = view.MangaViewModel{
-			ID:         manga.Id,
+			ID:         manga.Definition.Id,
 			Title:      title,
 			Number:     latestChapter.Number,
-			LastNumber: manga.LastChapterNum,
+			LastNumber: manga.Definition.LastChapterNum,
 			// I Hate this time Format... 15 = hh, 04 = mm, 02 = DD, 01 = MM, 06 == YY
 			LastTime:     time.Unix(manga.TimeStampUnix, 0).Format("15:04 (02-01-06)"),
 			Url:          latestChapter.Url,
@@ -214,10 +213,10 @@ func (s *Server) HandleCurrent(w http.ResponseWriter, _ *http.Request) {
 		fmt.Println(err)
 	}
 
-	var manga database.Manga
+	var manga database.MangaDefinition
 	result := s.DbMgr.Db.First(&manga, mangaId)
 	if result.Error != nil && errors.Is(result.Error, gorm.ErrRecordNotFound) {
-		manga = database.NewManga(mangaId, title, time.Now().Unix())
+		manga = database.NewMangaDefinition(mangaId, title, time.Now().Unix())
 	} else {
 		manga.TimeStampUnix = time.Now().Unix()
 	}

@@ -13,6 +13,8 @@ func GetViewTemplate(view View) (*template.Template, error) {
 		path = "internal/view/Views/menu.gohtml"
 	case Viewer:
 		path = "internal/view/Views/viewer.gohtml"
+	case Login:
+		path = "internal/view/Views/login.gohtml"
 	}
 	return template.ParseFiles(path)
 }

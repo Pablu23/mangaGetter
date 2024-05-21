@@ -18,6 +18,26 @@ import (
 	"time"
 )
 
+func (s *Server) HandleLoginPost(w http.ResponseWriter, r *http.Request) {
+  fmt.Println("Setting auth")
+	secret := r.PostFormValue("secret")
+	http.SetCookie(w, &http.Cookie{
+		Name:       "auth",
+		Value:      secret,
+		Path:       "/",
+		MaxAge:     3600,
+		Secure:     true,
+		HttpOnly:   false,
+		SameSite:   http.SameSiteLaxMode,
+	})
+  http.Redirect(w, r, "/", http.StatusFound)
+}
+
+func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
+  tmpl := template.Must(view.GetViewTemplate(view.Login))
+  tmpl.Execute(w, nil)
+}
+
 func (s *Server) HandleNew(w http.ResponseWriter, r *http.Request) {
 	title := r.PathValue("title")
 	chapter := r.PathValue("chapter")
@@ -32,7 +52,7 @@ func (s *Server) HandleNew(w http.ResponseWriter, r *http.Request) {
 	go s.LoadNext()
 	go s.LoadPrev()
 
-	http.Redirect(w, r, "/current/", http.StatusTemporaryRedirect)
+	http.Redirect(w, r, "/current/", http.StatusFound)
 }
 
 func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
@@ -159,24 +179,24 @@ func (s *Server) HandleDelete(w http.ResponseWriter, r *http.Request) {
 	mangaStr := r.PostFormValue("mangaId")
 
 	if mangaStr == "" {
-		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
 
 	mangaId, err := strconv.Atoi(mangaStr)
 	if err != nil {
 		fmt.Println(err)
-		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
 
 	s.DbMgr.Delete(mangaId)
 
-	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+	http.Redirect(w, r, "/", http.StatusFound)
 }
 
 func (s *Server) HandleExit(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+	http.Redirect(w, r, "/", http.StatusFound)
 
 	go func() {
 		s.Mutex.Lock()
@@ -284,7 +304,7 @@ func (s *Server) HandleNext(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.NextViewModel == nil || s.NextSubUrl == "" {
-		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
 
@@ -295,7 +315,7 @@ func (s *Server) HandleNext(w http.ResponseWriter, r *http.Request) {
 
 	go s.LoadNext()
 
-	http.Redirect(w, r, "/current/", http.StatusTemporaryRedirect)
+	http.Redirect(w, r, "/current/", http.StatusFound)
 }
 func (s *Server) HandlePrev(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Received Prev")
@@ -311,7 +331,7 @@ func (s *Server) HandlePrev(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.PrevViewModel == nil || s.PrevSubUrl == "" {
-		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
 
@@ -322,7 +342,7 @@ func (s *Server) HandlePrev(w http.ResponseWriter, r *http.Request) {
 
 	go s.LoadPrev()
 
-	http.Redirect(w, r, "/current/", http.StatusTemporaryRedirect)
+	http.Redirect(w, r, "/current/", http.StatusFound)
 }
 
 func (s *Server) HandleSettingSet(w http.ResponseWriter, r *http.Request) {
@@ -339,7 +359,7 @@ func (s *Server) HandleSettingSet(w http.ResponseWriter, r *http.Request) {
 		s.DbMgr.Db.Model(&setting).Update("value", settingValue)
 	}
 
-	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+	http.Redirect(w, r, "/", http.StatusFound)
 }
 
 func (s *Server) HandleSetting(w http.ResponseWriter, r *http.Request) {
@@ -356,7 +376,7 @@ func (s *Server) HandleSetting(w http.ResponseWriter, r *http.Request) {
 		s.DbMgr.Db.Model(&setting).Update("value", settingValue)
 	}
 
-	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+	http.Redirect(w, r, "/", http.StatusFound)
 }
 
 func (s *Server) HandleNewQuery(w http.ResponseWriter, r *http.Request) {
@@ -372,5 +392,5 @@ func (s *Server) HandleNewQuery(w http.ResponseWriter, r *http.Request) {
 	go s.LoadNext()
 	go s.LoadPrev()
 
-	http.Redirect(w, r, "/current/", http.StatusTemporaryRedirect)
+	http.Redirect(w, r, "/current/", http.StatusFound)
 }

@@ -34,32 +34,39 @@ type Server struct {
 	IsLast  bool
 
 	DbMgr *database.Manager
+
+	secret string
+	mux    *http.ServeMux
 }
 
-func New(provider provider.Provider, db *database.Manager) *Server {
+func New(provider provider.Provider, db *database.Manager, mux *http.ServeMux, secret string) *Server {
 	s := Server{
 		ImageBuffers: make(map[string][]byte),
 		Provider:     provider,
 		DbMgr:        db,
 		Mutex:        &sync.Mutex{},
+		mux:          mux,
+		secret:       secret,
 	}
 
 	return &s
 }
 
 func (s *Server) Start(port int) error {
-	http.HandleFunc("/", s.HandleMenu)
-	http.HandleFunc("/new/", s.HandleNewQuery)
-	http.HandleFunc("/new/title/{title}/{chapter}", s.HandleNew)
-	http.HandleFunc("/current/", s.HandleCurrent)
-	http.HandleFunc("/img/{url}/", s.HandleImage)
-	http.HandleFunc("POST /next", s.HandleNext)
-	http.HandleFunc("POST /prev", s.HandlePrev)
-	http.HandleFunc("POST /exit", s.HandleExit)
-	http.HandleFunc("POST /delete", s.HandleDelete)
-	http.HandleFunc("/favicon.ico", s.HandleFavicon)
-	http.HandleFunc("POST /setting/", s.HandleSetting)
-	http.HandleFunc("GET /setting/set/{setting}/{value}", s.HandleSettingSet)
+  s.mux.HandleFunc("GET /login", s.HandleLogin)
+  s.mux.HandleFunc("POST /login", s.HandleLoginPost)
+	s.mux.HandleFunc("/", s.HandleMenu)
+	s.mux.HandleFunc("/new/", s.HandleNewQuery)
+	s.mux.HandleFunc("/new/title/{title}/{chapter}", s.HandleNew)
+	s.mux.HandleFunc("/current/", s.HandleCurrent)
+	s.mux.HandleFunc("/img/{url}/", s.HandleImage)
+	s.mux.HandleFunc("POST /next", s.HandleNext)
+	s.mux.HandleFunc("POST /prev", s.HandlePrev)
+	s.mux.HandleFunc("POST /exit", s.HandleExit)
+	s.mux.HandleFunc("POST /delete", s.HandleDelete)
+	s.mux.HandleFunc("/favicon.ico", s.HandleFavicon)
+	s.mux.HandleFunc("POST /setting/", s.HandleSetting)
+	s.mux.HandleFunc("GET /setting/set/{setting}/{value}", s.HandleSettingSet)
 
 	// Update Latest Chapters every 5 Minutes
 	go func(s *Server) {
@@ -96,8 +103,12 @@ func (s *Server) Start(port int) error {
 	}(s)
 
 	fmt.Println("Server starting...")
-	err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
-	return err
+
+	server := http.Server{
+		Addr:    fmt.Sprintf(":%d", port),
+		Handler: s.Auth(s.mux),
+	}
+	return server.ListenAndServe()
 }
 
 func (s *Server) LoadNext() {

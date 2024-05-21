@@ -9,6 +9,21 @@ import (
 
 const port = 8000
 
+func getSecret() string {
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		panic(err)
+	}
+
+	dirPath := filepath.Join(dir, "MangaGetter")
+	filePath := filepath.Join(dirPath, "secret.secret")
+	buf, err := os.ReadFile(filePath)
+	if err != nil {
+		panic(err)
+	}
+	return string(buf)
+}
+
 func getDbPath() string {
 	dir, err := os.UserCacheDir()
 	if err != nil {

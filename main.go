@@ -2,14 +2,16 @@ package main
 
 import (
 	"fmt"
-	"github.com/pablu23/mangaGetter/internal/database"
-	"github.com/pablu23/mangaGetter/internal/provider"
-	"github.com/pablu23/mangaGetter/internal/server"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
 	"runtime"
 	"time"
+
+	"github.com/pablu23/mangaGetter/internal/database"
+	"github.com/pablu23/mangaGetter/internal/provider"
+	"github.com/pablu23/mangaGetter/internal/server"
 )
 
 func main() {
@@ -22,7 +24,9 @@ func main() {
 		return
 	}
 
-	s := server.New(&provider.Bato{}, &db)
+  secret := getSecret()
+  mux := http.NewServeMux()
+	s := server.New(&provider.Bato{}, &db, mux, secret)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)

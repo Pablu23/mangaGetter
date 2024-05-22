@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/pablu23/mangaGetter/internal/database"
@@ -15,7 +16,21 @@ import (
 )
 
 func main() {
-	filePath := getDbPath()
+	openBrowser := true
+	var filePath string
+	var secret string
+	if len(os.Args) >= 2 {
+		openBrowser = false
+		filePath = os.Args[2]
+		buf, err := os.ReadFile(os.Args[3])
+		if err != nil {
+			panic(err)
+		}
+		secret = string(buf)
+	} else {
+		secret = getSecret()
+		filePath = getDbPath()
+	}
 
 	db := database.NewDatabase(filePath, true)
 	err := db.Open()
@@ -24,8 +39,8 @@ func main() {
 		return
 	}
 
-  secret := getSecret()
-  mux := http.NewServeMux()
+  secret = strings.TrimSpace(secret)
+	mux := http.NewServeMux()
 	s := server.New(&provider.Bato{}, &db, mux, secret)
 
 	c := make(chan os.Signal, 1)
@@ -37,13 +52,15 @@ func main() {
 		}
 	}()
 
-	go func() {
-		time.Sleep(300 * time.Millisecond)
-		err := open(fmt.Sprintf("http://localhost:%d", port))
-		if err != nil {
-			fmt.Println(err)
-		}
-	}()
+	if openBrowser {
+		go func() {
+			time.Sleep(300 * time.Millisecond)
+			err := open(fmt.Sprintf("http://localhost:%d", port))
+			if err != nil {
+				fmt.Println(err)
+			}
+		}()
+	}
 
 	err = s.Start(port)
 	if err != nil {

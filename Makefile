@@ -1,6 +1,5 @@
 run: develop
 	bin/develop
-
 develop:
 	go build -tags Develop -o bin/develop 
 release:

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 )
 
-const port = 8000
+const port = 80
 
 func getSecret() string {
 	dir, err := os.UserCacheDir()

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -15,20 +16,39 @@ import (
 	"github.com/pablu23/mangaGetter/internal/server"
 )
 
+var (
+	secretFlag         = flag.String("secret", "", "Secret to use for Auth")
+	authFlag           = flag.Bool("auth", false, "Use Auth, does not need to be set if secret or secret-path is set")
+	secretFilePathFlag = flag.String("secret-path", "", "Path to file with ONLY secret in it")
+	portFlag           = flag.Int("port", 80, "The port on which to host")
+	serverFlag         = flag.Bool("server", false, "If false dont open Browser with Address")
+	databaseFlag       = flag.String("database", "", "Path to sqlite.db file")
+)
+
 func main() {
-	openBrowser := true
+	var secret string = ""
 	var filePath string
-	var secret string
-	if len(os.Args) >= 2 {
-		openBrowser = false
-		filePath = os.Args[2]
-		buf, err := os.ReadFile(os.Args[3])
+
+	flag.Parse()
+	if secretFlag != nil && *secretFlag != "" {
+		secret = *secretFlag
+	} else if secretFilePathFlag != nil && *secretFilePathFlag != "" {
+		buf, err := os.ReadFile(*secretFilePathFlag)
 		if err != nil {
 			panic(err)
 		}
 		secret = string(buf)
+	} else if *authFlag {
+		cacheSecret, err := getSecret()
+		secret = cacheSecret
+		if err != nil {
+			fmt.Printf("Secret file could not be found or read because of %s, not activating Auth\n", err)
+		}
+	}
+
+	if databaseFlag != nil && *databaseFlag != "" {
+		filePath = *databaseFlag
 	} else {
-		secret = getSecret()
 		filePath = getDbPath()
 	}
 
@@ -39,7 +59,7 @@ func main() {
 		return
 	}
 
-  secret = strings.TrimSpace(secret)
+	secret = strings.TrimSpace(secret)
 	mux := http.NewServeMux()
 	s := server.New(&provider.Bato{}, &db, mux, secret)
 
@@ -52,17 +72,17 @@ func main() {
 		}
 	}()
 
-	if openBrowser {
+	if serverFlag != nil && !*serverFlag {
 		go func() {
 			time.Sleep(300 * time.Millisecond)
-			err := open(fmt.Sprintf("http://localhost:%d", port))
+			err := open(fmt.Sprintf("http://localhost:%d", *portFlag))
 			if err != nil {
 				fmt.Println(err)
 			}
 		}()
 	}
 
-	err = s.Start(port)
+	err = s.Start(*portFlag)
 	if err != nil {
 		panic(err)
 	}

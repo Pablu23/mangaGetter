@@ -11,7 +11,7 @@ func (s *Server) Auth(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if cookie != nil && cookie.Value == s.secret {
+		if s.secret == "" || (cookie != nil && cookie.Value == s.secret) {
 			next.ServeHTTP(w, r)
 		} else {
 			http.Redirect(w, r, "/login", http.StatusFound)

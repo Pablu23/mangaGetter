@@ -7,21 +7,19 @@ import (
 	"path/filepath"
 )
 
-const port = 80
-
-func getSecret() string {
+func getSecret() (string, error) {
 	dir, err := os.UserCacheDir()
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 
 	dirPath := filepath.Join(dir, "MangaGetter")
 	filePath := filepath.Join(dirPath, "secret.secret")
 	buf, err := os.ReadFile(filePath)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
-	return string(buf)
+	return string(buf), nil
 }
 
 func getDbPath() string {

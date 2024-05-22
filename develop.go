@@ -2,10 +2,8 @@
 
 package main
 
-const port = 8080
-
-func getSecret() string {
-	return "test"
+func getSecret() (string, error) {
+	return "test", nil
 }
 
 func getDbPath() string {

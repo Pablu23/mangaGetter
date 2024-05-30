@@ -23,6 +23,8 @@ var (
 	portFlag           = flag.Int("port", 80, "The port on which to host")
 	serverFlag         = flag.Bool("server", false, "If false dont open Browser with Address")
 	databaseFlag       = flag.String("database", "", "Path to sqlite.db file")
+	certFlag           = flag.String("cert", "", "Path to cert file, has to be used in conjunction with key")
+	keyFlag            = flag.String("key", "", "Path to key file, has to be used in conjunction with cert")
 )
 
 func main() {
@@ -82,9 +84,17 @@ func main() {
 		}()
 	}
 
-	err = s.Start(*portFlag)
-	if err != nil {
-		panic(err)
+	s.RegisterRoutes()
+	if *certFlag != "" && *keyFlag != "" {
+		err = s.StartTLS(*portFlag, *certFlag, *keyFlag)
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		err = s.Start(*portFlag)
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 

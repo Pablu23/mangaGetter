@@ -52,9 +52,9 @@ func New(provider provider.Provider, db *database.Manager, mux *http.ServeMux, s
 	return &s
 }
 
-func (s *Server) Start(port int) error {
-  s.mux.HandleFunc("GET /login", s.HandleLogin)
-  s.mux.HandleFunc("POST /login", s.HandleLoginPost)
+func (s *Server) RegisterRoutes() {
+	s.mux.HandleFunc("GET /login", s.HandleLogin)
+	s.mux.HandleFunc("POST /login", s.HandleLoginPost)
 	s.mux.HandleFunc("/", s.HandleMenu)
 	s.mux.HandleFunc("/new/", s.HandleNewQuery)
 	s.mux.HandleFunc("/new/title/{title}/{chapter}", s.HandleNew)
@@ -68,9 +68,32 @@ func (s *Server) Start(port int) error {
 	s.mux.HandleFunc("POST /setting/", s.HandleSetting)
 	s.mux.HandleFunc("GET /setting/set/{setting}/{value}", s.HandleSettingSet)
 
-	// Update Latest Chapters every 5 Minutes
-	go func(s *Server) {
-		time.AfterFunc(time.Second*10, func() {
+}
+
+func (s *Server) StartTLS(port int, certFile, keyFile string) error {
+	fmt.Println("Server starting...")
+
+	server := http.Server{
+		Addr:    fmt.Sprintf(":%d", port),
+		Handler: s.Auth(s.mux),
+	}
+	return server.ListenAndServeTLS(certFile, keyFile)
+}
+
+func (s *Server) Start(port int) error {
+	fmt.Println("Server starting...")
+
+	server := http.Server{
+		Addr:    fmt.Sprintf(":%d", port),
+		Handler: s.Auth(s.mux),
+	}
+	return server.ListenAndServe()
+}
+
+func (s *Server) RegisterUpdateMangas(interval time.Duration) {
+	for {
+		select {
+		case <-time.After(interval):
 			var all []*database.Manga
 			s.DbMgr.Db.Find(&all)
 			for _, m := range all {
@@ -82,33 +105,8 @@ func (s *Server) Start(port int) error {
 					s.DbMgr.Db.Save(m)
 				}
 			}
-		})
-
-		for {
-			select {
-			case <-time.After(time.Minute * 5):
-				var all []*database.Manga
-				s.DbMgr.Db.Find(&all)
-				for _, m := range all {
-					err, updated := s.UpdateLatestAvailableChapter(m)
-					if err != nil {
-						fmt.Println(err)
-					}
-					if updated {
-						s.DbMgr.Db.Save(m)
-					}
-				}
-			}
 		}
-	}(s)
-
-	fmt.Println("Server starting...")
-
-	server := http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
-		Handler: s.Auth(s.mux),
 	}
-	return server.ListenAndServe()
 }
 
 func (s *Server) LoadNext() {

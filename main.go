@@ -14,6 +14,8 @@ import (
 	"github.com/pablu23/mangaGetter/internal/database"
 	"github.com/pablu23/mangaGetter/internal/provider"
 	"github.com/pablu23/mangaGetter/internal/server"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -26,6 +28,8 @@ var (
 	certFlag           = flag.String("cert", "", "Path to cert file, has to be used in conjunction with key")
 	keyFlag            = flag.String("key", "", "Path to key file, has to be used in conjunction with cert")
 	updateIntervalFlag = flag.String("update", "1h", "Interval to update Mangas")
+	debugFlag          = flag.Bool("debug", false, "Activate debug Logs")
+	prettyLogsFlag     = flag.Bool("pretty", false, "Pretty pring Logs")
 )
 
 func main() {
@@ -33,19 +37,28 @@ func main() {
 	var filePath string
 
 	flag.Parse()
+
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	if *prettyLogsFlag {
+		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	}
+	if !*debugFlag {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	}
+
 	if *secretFlag != "" {
 		secret = *secretFlag
 	} else if *secretFilePathFlag != "" {
 		buf, err := os.ReadFile(*secretFilePathFlag)
 		if err != nil {
-			panic(err)
+			log.Fatal().Err(err).Str("Path", *secretFilePathFlag).Msg("Could not read secret File")
 		}
 		secret = string(buf)
 	} else if *authFlag {
 		cacheSecret, err := getSecret()
 		secret = cacheSecret
 		if err != nil {
-			fmt.Printf("Secret file could not be found or read because of %s, not activating Auth\n", err)
+			log.Error().Err(err).Msg("Secret file could not be found or read, not activating Auth")
 		}
 	}
 
@@ -58,8 +71,7 @@ func main() {
 	db := database.NewDatabase(filePath, true)
 	err := db.Open()
 	if err != nil {
-		fmt.Println(err)
-		return
+		log.Fatal().Err(err).Str("Path", filePath).Msg("Could not open Database")
 	}
 
 	secret = strings.TrimSpace(secret)
@@ -80,14 +92,14 @@ func main() {
 			time.Sleep(300 * time.Millisecond)
 			err := open(fmt.Sprintf("http://localhost:%d", *portFlag))
 			if err != nil {
-				fmt.Println(err)
+				log.Error().Err(err).Msg("Could not open Browser")
 			}
 		}()
 	}
 
 	interval, err := time.ParseDuration(*updateIntervalFlag)
 	if err != nil {
-		panic(err)
+		log.Fatal().Err(err).Str("Interval", *updateIntervalFlag).Msg("Could not parse interval")
 	}
 	s.RegisterUpdater(interval)
 	s.RegisterRoutes()
@@ -95,12 +107,12 @@ func main() {
 	if *certFlag != "" && *keyFlag != "" {
 		err = s.StartTLS(*portFlag, *certFlag, *keyFlag)
 		if err != nil {
-			panic(err)
+			log.Fatal().Err(err).Str("Cert", *certFlag).Str("Key", *keyFlag).Int("Port", *portFlag).Msg("Could not start TLS server")
 		}
 	} else {
 		err = s.Start(*portFlag)
 		if err != nil {
-			panic(err)
+			log.Fatal().Err(err).Int("Port", *portFlag).Msg("Could not start server")
 		}
 	}
 }
@@ -123,10 +135,11 @@ func open(url string) error {
 }
 
 func Close(db *database.Manager) {
-	fmt.Println("Attempting to save and close DB")
+	log.Debug().Msg("Closing Database")
 	err := db.Close()
 	if err != nil {
-		fmt.Println(err)
+		log.Error().Err(err).Msg("Could not close Database")
+		return
 	}
 	os.Exit(0)
 }

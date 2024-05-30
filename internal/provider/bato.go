@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+
+	"github.com/rs/zerolog/log"
 )
 
 type Bato struct{}
@@ -49,7 +51,7 @@ func (b *Bato) GetHtml(titleSubUrl string) (string, error) {
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
-			fmt.Printf("Could not close body because: %v\n", err)
+			log.Error().Err(err).Msg("Could not close http body")
 		}
 	}(resp.Body)
 
@@ -64,14 +66,23 @@ func (b *Bato) GetHtml(titleSubUrl string) (string, error) {
 
 func (b *Bato) GetNext(html string) (subUrl string, err error) {
 	reg, err := regexp.Compile(`<a data-hk="0-6-0" .*? href="(.*?)["']`)
-	match := reg.FindStringSubmatch(html)
+	if err != nil {
+		return "", err
+	}
 
+	match := reg.FindStringSubmatch(html)
+	if len(match) <= 1 {
+		return "", err
+	}
 	return match[1], err
 }
 
 func (b *Bato) GetPrev(html string) (subUrl string, err error) {
 	reg, err := regexp.Compile(`<a data-hk="0-5-0" .*? href="(.*?)["']`)
 	match := reg.FindStringSubmatch(html)
+	if len(match) <= 1 {
+		return "", err
+	}
 
 	return match[1], err
 }

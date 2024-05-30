@@ -5,41 +5,43 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
-	"github.com/pablu23/mangaGetter/internal/database"
-	"github.com/pablu23/mangaGetter/internal/view"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
-	"gorm.io/gorm"
 	"html/template"
 	"net/http"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pablu23/mangaGetter/internal/database"
+	"github.com/pablu23/mangaGetter/internal/view"
+	"github.com/rs/zerolog/log"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+	"gorm.io/gorm"
 )
 
-func (s *Server) HandleUpdate(w http.ResponseWriter, r *http.Request){
-  s.UpdateMangaList()
-  http.Redirect(w, r, "/", http.StatusFound)
+func (s *Server) HandleUpdate(w http.ResponseWriter, r *http.Request) {
+	s.UpdateMangaList()
+	http.Redirect(w, r, "/", http.StatusFound)
 }
 
 func (s *Server) HandleLoginPost(w http.ResponseWriter, r *http.Request) {
 	secret := r.PostFormValue("secret")
 	http.SetCookie(w, &http.Cookie{
-		Name:       "auth",
-		Value:      secret,
-		Path:       "/",
-		MaxAge:     3600,
-		Secure:     false,
-		HttpOnly:   false,
-		SameSite:   http.SameSiteLaxMode,
+		Name:     "auth",
+		Value:    secret,
+		Path:     "/",
+		MaxAge:   3600,
+		Secure:   false,
+		HttpOnly: false,
+		SameSite: http.SameSiteLaxMode,
 	})
-  http.Redirect(w, r, "/", http.StatusFound)
+	http.Redirect(w, r, "/", http.StatusFound)
 }
 
 func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
-  tmpl := template.Must(view.GetViewTemplate(view.Login))
-  tmpl.Execute(w, nil)
+	tmpl := template.Must(view.GetViewTemplate(view.Login))
+	tmpl.Execute(w, nil)
 }
 
 func (s *Server) HandleNew(w http.ResponseWriter, r *http.Request) {
@@ -67,8 +69,6 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 	mangaViewModels := make([]view.MangaViewModel, l)
 	counter := 0
 
-	n := time.Now().UnixNano()
-
 	var tmp []database.Setting
 	s.DbMgr.Db.Find(&tmp)
 	settings := make(map[string]database.Setting)
@@ -76,14 +76,9 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 		settings[m.Name] = m
 	}
 
-	var thumbNs int64 = 0
-	var titNs int64 = 0
-
 	//TODO: Change all this to be more performant
 	for _, manga := range all {
 		title := cases.Title(language.English, cases.Compact).String(strings.Replace(manga.Title, "-", " ", -1))
-
-		t1 := time.Now().UnixNano()
 
 		thumbnail, updated, err := s.LoadThumbnail(manga)
 		//TODO: Add default picture instead of not showing Manga at all
@@ -93,28 +88,17 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 		if updated {
 			s.DbMgr.Db.Save(manga)
 		}
-
-		t2 := time.Now().UnixNano()
-
-		thumbNs += t2 - t1
-
-		t1 = time.Now().UnixNano()
-
 		// This is very slow
 		// TODO: put this into own Method
 		if manga.LastChapterNum == "" {
 			err, updated := s.UpdateLatestAvailableChapter(manga)
 			if err != nil {
-				fmt.Println(err)
+				log.Error().Err(err).Msg("Could not update latest available chapters")
 			}
 			if updated {
 				s.DbMgr.Db.Save(manga)
 			}
 		}
-
-		t2 = time.Now().UnixNano()
-
-		titNs += t2 - t1
 
 		latestChapter, ok := manga.GetLatestChapter()
 		if !ok {
@@ -133,14 +117,6 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 		}
 		counter++
 	}
-
-	fmt.Printf("Loading Thumbnails took %d ms\n", (thumbNs)/1000000)
-	fmt.Printf("Loading latest Chapters took %d ms\n", (titNs)/1000000)
-
-	nex := time.Now().UnixNano()
-	fmt.Printf("Creating Viewmodels took %d ms\n", (nex-n)/1000000)
-
-	n = time.Now().UnixNano()
 
 	order, ok := settings["order"]
 	if !ok || order.Value == "title" {
@@ -165,9 +141,6 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 		})
 	}
 
-	nex = time.Now().UnixNano()
-	fmt.Printf("Sorting took %d ms\n", (nex-n)/1000000)
-
 	menuViewModel := view.MenuViewModel{
 		Settings: settings,
 		Mangas:   mangaViewModels,
@@ -175,7 +148,7 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 
 	err := tmpl.Execute(w, menuViewModel)
 	if err != nil {
-		fmt.Println(err)
+		log.Error().Err(err).Msg("Could not template Menu")
 	}
 }
 
@@ -189,7 +162,7 @@ func (s *Server) HandleDelete(w http.ResponseWriter, r *http.Request) {
 
 	mangaId, err := strconv.Atoi(mangaStr)
 	if err != nil {
-		fmt.Println(err)
+		log.Error().Err(err).Str("Id", mangaStr).Msg("Could not convert id to int")
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
@@ -222,20 +195,22 @@ func (s *Server) HandleExit(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		s.Mutex.Unlock()
-		fmt.Println("Cleaned last Manga")
+		log.Info().Msg("Cleaned up images")
 	}()
 }
 
-func (s *Server) HandleCurrent(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) HandleCurrent(w http.ResponseWriter, r *http.Request) {
 	tmpl := template.Must(view.GetViewTemplate(view.Viewer))
 	mangaId, chapterId, err := s.Provider.GetTitleIdAndChapterId(s.CurrSubUrl)
 	if err != nil {
-		fmt.Println(err)
+		log.Error().Err(err).Str("subUrl", s.CurrSubUrl).Msg("Could not get TitleId and ChapterId")
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
 	}
 
 	title, chapterName, err := s.Provider.GetTitleAndChapter(s.CurrSubUrl)
 	if err != nil {
-		fmt.Println(err)
+		log.Warn().Err(err).Str("subUrl", s.CurrSubUrl).Msg("Could not get Title and Chapter")
 	}
 
 	var manga database.Manga
@@ -260,7 +235,7 @@ func (s *Server) HandleCurrent(w http.ResponseWriter, _ *http.Request) {
 
 	err = tmpl.Execute(w, s.CurrViewModel)
 	if err != nil {
-		fmt.Println(err)
+		log.Error().Err(err).Msg("Could not template Current")
 	}
 }
 
@@ -270,15 +245,15 @@ func (s *Server) HandleImage(w http.ResponseWriter, r *http.Request) {
 	defer s.Mutex.Unlock()
 	buf := s.ImageBuffers[u]
 	if buf == nil {
-		fmt.Printf("url: %s is nil\n", u)
-		w.WriteHeader(400)
+		log.Warn().Str("url", u).Msg("Image not found")
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
 	w.Header().Set("Content-Type", "image/webp")
 	_, err := w.Write(buf)
 	if err != nil {
-		fmt.Println(err)
+		log.Error().Err(err).Msg("Could not write image")
 	}
 }
 
@@ -289,13 +264,11 @@ func (s *Server) HandleFavicon(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "image/webp")
 	_, err := w.Write(ico)
 	if err != nil {
-		fmt.Println(err)
+		log.Error().Err(err).Msg("Could not write favicon")
 	}
 }
 
 func (s *Server) HandleNext(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Received Next")
-
 	if s.PrevViewModel != nil {
 		go func(viewModel view.ImageViewModel, s *Server) {
 			s.Mutex.Lock()
@@ -303,7 +276,7 @@ func (s *Server) HandleNext(w http.ResponseWriter, r *http.Request) {
 				delete(s.ImageBuffers, img.Path)
 			}
 			s.Mutex.Unlock()
-			fmt.Println("Cleaned out of scope Last")
+			log.Debug().Msg("Cleaned imagebuffer")
 		}(*s.PrevViewModel, s)
 	}
 
@@ -321,8 +294,8 @@ func (s *Server) HandleNext(w http.ResponseWriter, r *http.Request) {
 
 	http.Redirect(w, r, "/current/", http.StatusFound)
 }
+
 func (s *Server) HandlePrev(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Received Prev")
 	if s.NextViewModel != nil {
 		go func(viewModel view.ImageViewModel, s *Server) {
 			s.Mutex.Lock()
@@ -330,7 +303,7 @@ func (s *Server) HandlePrev(w http.ResponseWriter, r *http.Request) {
 				delete(s.ImageBuffers, img.Path)
 			}
 			s.Mutex.Unlock()
-			fmt.Println("Cleaned out of scope Last")
+			log.Debug().Msg("Cleaned imagebuffer")
 		}(*s.NextViewModel, s)
 	}
 
@@ -376,6 +349,8 @@ func (s *Server) HandleSetting(w http.ResponseWriter, r *http.Request) {
 	if res.Error != nil && errors.Is(res.Error, gorm.ErrRecordNotFound) {
 		set := database.NewSetting(settingName, settingValue)
 		s.DbMgr.Db.Save(&set)
+	} else if res.Error != nil {
+		log.Error().Err(res.Error).Send()
 	} else {
 		s.DbMgr.Db.Model(&setting).Update("value", settingValue)
 	}

@@ -4,9 +4,6 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
-	"github.com/pablu23/mangaGetter/internal/database"
-	"github.com/pablu23/mangaGetter/internal/provider"
-	"github.com/pablu23/mangaGetter/internal/view"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -14,6 +11,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/pablu23/mangaGetter/internal/database"
+	"github.com/pablu23/mangaGetter/internal/provider"
+	"github.com/pablu23/mangaGetter/internal/view"
+	"github.com/rs/zerolog/log"
 )
 
 type Server struct {
@@ -67,12 +69,11 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("/favicon.ico", s.HandleFavicon)
 	s.mux.HandleFunc("POST /setting/", s.HandleSetting)
 	s.mux.HandleFunc("GET /setting/set/{setting}/{value}", s.HandleSettingSet)
-  s.mux.HandleFunc("GET /update", s.HandleUpdate)
+	s.mux.HandleFunc("GET /update", s.HandleUpdate)
 }
 
 func (s *Server) StartTLS(port int, certFile, keyFile string) error {
-	fmt.Println("Server starting...")
-
+	log.Info().Int("Port", port).Str("Certificate", certFile).Str("Key", keyFile).Msg("Starting server")
 	server := http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
 		Handler: s.Auth(s.mux),
@@ -81,7 +82,7 @@ func (s *Server) StartTLS(port int, certFile, keyFile string) error {
 }
 
 func (s *Server) Start(port int) error {
-	fmt.Println("Server starting...")
+	log.Info().Int("Port", port).Msg("Starting server")
 
 	server := http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
@@ -96,7 +97,7 @@ func (s *Server) UpdateMangaList() {
 	for _, m := range all {
 		err, updated := s.UpdateLatestAvailableChapter(m)
 		if err != nil {
-			fmt.Println(err)
+			log.Error().Err(err).Str("Manga", m.Title).Msg("Could not update latest available chapters")
 		}
 		if updated {
 			s.DbMgr.Db.Save(m)
@@ -118,7 +119,7 @@ func (s *Server) RegisterUpdater(interval time.Duration) {
 func (s *Server) LoadNext() {
 	c, err := s.Provider.GetHtml(s.CurrSubUrl)
 	if err != nil {
-		fmt.Println(err)
+		log.Error().Err(err).Msg("Could not get Html for current chapter")
 		s.NextSubUrl = ""
 		s.NextViewModel = nil
 		return
@@ -126,7 +127,7 @@ func (s *Server) LoadNext() {
 
 	next, err := s.Provider.GetNext(c)
 	if err != nil {
-		fmt.Println(err)
+		log.Error().Err(err).Msg("Could not load next chapter")
 		s.NextSubUrl = ""
 		s.NextViewModel = nil
 		return
@@ -134,7 +135,7 @@ func (s *Server) LoadNext() {
 
 	html, err := s.Provider.GetHtml(next)
 	if err != nil {
-		fmt.Println(err)
+		log.Error().Err(err).Msg("Could not get Html for next chapter")
 		s.NextSubUrl = ""
 		s.NextViewModel = nil
 		return
@@ -142,7 +143,7 @@ func (s *Server) LoadNext() {
 
 	imagesNext, err := s.AppendImagesToBuf(html)
 	if err != nil {
-		fmt.Println(err)
+		log.Error().Err(err).Msg("Could not download images")
 		s.NextSubUrl = ""
 		s.NextViewModel = nil
 		return
@@ -150,6 +151,7 @@ func (s *Server) LoadNext() {
 
 	title, chapter, err := s.Provider.GetTitleAndChapter(next)
 	if err != nil {
+		log.Warn().Err(err).Str("Url", next).Msg("Could not extract title and chapter")
 		title = "Unknown"
 		chapter = "ch_?"
 	}
@@ -158,27 +160,27 @@ func (s *Server) LoadNext() {
 
 	s.NextViewModel = &view.ImageViewModel{Images: imagesNext, Title: full}
 	s.NextSubUrl = next
-	fmt.Println("Loaded next")
+	log.Debug().Msg("Successfully loaded next chapter")
 }
 
 func (s *Server) LoadPrev() {
 	c, err := s.Provider.GetHtml(s.CurrSubUrl)
 	if err != nil {
-		fmt.Println(err)
+		log.Error().Err(err).Msg("Could not get Html for current chapter")
 		s.PrevSubUrl = ""
 		s.PrevViewModel = nil
 		return
 	}
 	prev, err := s.Provider.GetPrev(c)
 	if err != nil {
-		fmt.Println(err)
+		log.Error().Err(err).Msg("Could not load prev chapter")
 		s.PrevSubUrl = ""
 		s.PrevViewModel = nil
 		return
 	}
 	html, err := s.Provider.GetHtml(prev)
 	if err != nil {
-		fmt.Println(err)
+		log.Error().Err(err).Msg("Could not get Html for prev chapter")
 		s.PrevSubUrl = ""
 		s.PrevViewModel = nil
 		return
@@ -186,7 +188,7 @@ func (s *Server) LoadPrev() {
 
 	imagesNext, err := s.AppendImagesToBuf(html)
 	if err != nil {
-		fmt.Println(err)
+		log.Error().Err(err).Msg("Could not download images")
 		s.PrevSubUrl = ""
 		s.PrevViewModel = nil
 		return
@@ -194,6 +196,7 @@ func (s *Server) LoadPrev() {
 
 	title, chapter, err := s.Provider.GetTitleAndChapter(prev)
 	if err != nil {
+		log.Warn().Err(err).Str("Url", prev).Msg("Could not extract title and chapter")
 		title = "Unknown"
 		chapter = "ch_?"
 	}
@@ -203,19 +206,28 @@ func (s *Server) LoadPrev() {
 	s.PrevViewModel = &view.ImageViewModel{Images: imagesNext, Title: full}
 
 	s.PrevSubUrl = prev
-	fmt.Println("Loaded prev")
+	log.Debug().Msg("Successfully loaded prev chapter")
+
 }
 
 func (s *Server) LoadCurr() {
 	html, err := s.Provider.GetHtml(s.CurrSubUrl)
 	if err != nil {
-		panic(err)
+		log.Error().Err(err).Msg("Could not get Html for current chapter")
+		s.NextSubUrl = ""
+		s.PrevSubUrl = ""
+		s.CurrSubUrl = ""
+		s.NextViewModel = nil
+		s.CurrViewModel = nil
+		s.PrevViewModel = nil
+		return
 	}
 
 	imagesCurr, err := s.AppendImagesToBuf(html)
 
 	title, chapter, err := s.Provider.GetTitleAndChapter(s.CurrSubUrl)
 	if err != nil {
+		log.Warn().Err(err).Str("Url", s.CurrSubUrl).Msg("Could not extract title and chapter")
 		title = "Unknown"
 		chapter = "ch_?"
 	}
@@ -223,11 +235,11 @@ func (s *Server) LoadCurr() {
 	full := strings.Replace(title, "-", " ", -1) + " - " + strings.Replace(chapter, "_", " ", -1)
 
 	s.CurrViewModel = &view.ImageViewModel{Images: imagesCurr, Title: full}
-	fmt.Println("Loaded current")
+	log.Debug().Msg("Successfully loaded curr chapter")
 }
 
 func (s *Server) UpdateLatestAvailableChapter(manga *database.Manga) (error, bool) {
-	fmt.Printf("Updating Manga: %s\n", manga.Title)
+	log.Info().Str("Manga", manga.Title).Msg("Updating Manga")
 
 	l, err := s.Provider.GetChapterList("/title/" + strconv.Itoa(manga.Id))
 	if err != nil {
@@ -315,7 +327,7 @@ func addFileToRam(url string) ([]byte, error) {
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
-			fmt.Println(err)
+			log.Error().Err(err).Msg("Could not close http body")
 		}
 	}(resp.Body)
 

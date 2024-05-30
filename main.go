@@ -32,9 +32,9 @@ func main() {
 	var filePath string
 
 	flag.Parse()
-	if secretFlag != nil && *secretFlag != "" {
+	if *secretFlag != "" {
 		secret = *secretFlag
-	} else if secretFilePathFlag != nil && *secretFilePathFlag != "" {
+	} else if *secretFilePathFlag != "" {
 		buf, err := os.ReadFile(*secretFilePathFlag)
 		if err != nil {
 			panic(err)
@@ -48,7 +48,7 @@ func main() {
 		}
 	}
 
-	if databaseFlag != nil && *databaseFlag != "" {
+	if *databaseFlag != "" {
 		filePath = *databaseFlag
 	} else {
 		filePath = getDbPath()
@@ -74,7 +74,7 @@ func main() {
 		}
 	}()
 
-	if serverFlag != nil && !*serverFlag {
+	if !*serverFlag {
 		go func() {
 			time.Sleep(300 * time.Millisecond)
 			err := open(fmt.Sprintf("http://localhost:%d", *portFlag))

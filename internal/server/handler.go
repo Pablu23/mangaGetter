@@ -361,6 +361,7 @@ func (s *Server) HandleSetting(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleNewQuery(w http.ResponseWriter, r *http.Request) {
 	sub := r.PostFormValue("subUrl")
 
+	sub = s.Provider.CleanUrlToSub(sub)
 	url := fmt.Sprintf("/title/%s", sub)
 
 	s.CurrSubUrl = url

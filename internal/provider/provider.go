@@ -1,6 +1,7 @@
 package provider
 
 type Provider interface {
+  CleanUrlToSub(url string) string
 	GetImageList(html string) (imageUrls []string, err error)
 	GetHtml(url string) (html string, err error)
 	GetNext(html string) (url string, err error)

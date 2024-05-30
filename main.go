@@ -68,7 +68,7 @@ func main() {
 		filePath = getDbPath()
 	}
 
-	db := database.NewDatabase(filePath, true)
+	db := database.NewDatabase(filePath, true, *debugFlag)
 	err := db.Open()
 	if err != nil {
 		log.Fatal().Err(err).Str("Path", filePath).Msg("Could not open Database")

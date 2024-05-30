@@ -7,11 +7,18 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/rs/zerolog/log"
 )
 
 type Bato struct{}
+
+func (b *Bato) CleanUrlToSub(url string) string {
+	trimmed := strings.TrimPrefix(url, "https://bato.to/title")
+	trimmed = strings.Trim(trimmed, "/")
+	return trimmed
+}
 
 func (b *Bato) GetImageList(html string) ([]string, error) {
 	reg, err := regexp.Compile(`<astro-island.*props=".*;imageFiles&quot;:\[1,&quot;\[(.*)]&quot;]`)

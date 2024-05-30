@@ -25,6 +25,7 @@ var (
 	databaseFlag       = flag.String("database", "", "Path to sqlite.db file")
 	certFlag           = flag.String("cert", "", "Path to cert file, has to be used in conjunction with key")
 	keyFlag            = flag.String("key", "", "Path to key file, has to be used in conjunction with cert")
+	updateIntervalFlag = flag.String("update", "1h", "Interval to update Mangas")
 )
 
 func main() {
@@ -84,7 +85,13 @@ func main() {
 		}()
 	}
 
+	interval, err := time.ParseDuration(*updateIntervalFlag)
+	if err != nil {
+		panic(err)
+	}
+	s.RegisterUpdater(interval)
 	s.RegisterRoutes()
+
 	if *certFlag != "" && *keyFlag != "" {
 		err = s.StartTLS(*portFlag, *certFlag, *keyFlag)
 		if err != nil {

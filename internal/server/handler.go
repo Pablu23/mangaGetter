@@ -26,7 +26,7 @@ func (s *Server) HandleLoginPost(w http.ResponseWriter, r *http.Request) {
 		Value:      secret,
 		Path:       "/",
 		MaxAge:     3600,
-		Secure:     true,
+		Secure:     false,
 		HttpOnly:   false,
 		SameSite:   http.SameSiteLaxMode,
 	})

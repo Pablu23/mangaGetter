@@ -6,3 +6,5 @@ h.html
 *.bak
 /bin
 *.exe
+*secret*
+mangaGetter

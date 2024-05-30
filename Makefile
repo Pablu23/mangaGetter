@@ -1,5 +1,5 @@
 run: develop
-	bin/develop
+	bin/develop --server --port 8080 --secret test --database db.sqlite
 develop:
 	go build -tags Develop -o bin/develop 
 release:

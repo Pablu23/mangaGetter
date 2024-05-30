@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -16,6 +17,7 @@ import (
 	"github.com/pablu23/mangaGetter/internal/server"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var (
@@ -30,6 +32,7 @@ var (
 	updateIntervalFlag = flag.String("update", "1h", "Interval to update Mangas")
 	debugFlag          = flag.Bool("debug", false, "Activate debug Logs")
 	prettyLogsFlag     = flag.Bool("pretty", false, "Pretty pring Logs")
+	logPathFlag        = flag.String("log", "", "Path to logfile, stderr if default")
 )
 
 func main() {
@@ -44,6 +47,18 @@ func main() {
 	}
 	if !*debugFlag {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	}
+
+	if *logPathFlag != "" {
+		var console io.Writer = os.Stderr
+		if *prettyLogsFlag {
+			console = zerolog.ConsoleWriter{Out: os.Stderr}
+		}
+		log.Logger = log.Output(zerolog.MultiLevelWriter(console, &lumberjack.Logger{
+			Filename:   *logPathFlag,
+			MaxAge:     14,
+			MaxBackups: 10,
+		}))
 	}
 
 	if *secretFlag != "" {

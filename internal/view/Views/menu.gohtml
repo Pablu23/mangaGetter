@@ -1,179 +1,192 @@
 <!DOCTYPE html>
 <!--suppress CssUnusedSymbol -->
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <title>Main Menu</title>
+  <meta charset="UTF-8">
+  <title>Main Menu</title>
 
-    <style>
-        body {
-            padding: 25px;
-            background-color: white;
-            color: black;
-            font-size: 25px;
-        }
+  <style>
+    body {
+      padding: 25px;
+      background-color: white;
+      color: black;
+      font-size: 25px;
+    }
 
-        .dark {
-            background-color: #171717;
-            color: white;
-        }
+    .dark {
+      background-color: #171717;
+      color: white;
+    }
 
-        .white {
-            background-color: white;
-            color: black;
-        }
+    .white {
+      background-color: white;
+      color: black;
+    }
 
-        .button-36 {
-            background-image: linear-gradient(92.88deg, #455EB5 9.16%, #5643CC 43.89%, #673FD7 64.72%);
-            border-radius: 8px;
-            border-style: none;
-            box-sizing: border-box;
-            color: #FFFFFF;
-            cursor: pointer;
-            flex-shrink: 0;
-            font-family: "Inter UI","SF Pro Display",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen,Ubuntu,Cantarell,"Open Sans","Helvetica Neue",sans-serif;
-            font-size: 16px;
-            font-weight: 500;
-            height: 4rem;
-            padding: 0 1.6rem;
-            text-align: center;
-            text-shadow: rgba(0, 0, 0, 0.25) 0 3px 8px;
-            transition: all .5s;
-            user-select: none;
-            -webkit-user-select: none;
-            touch-action: manipulation;
-        }
+    .button-36 {
+      background-image: linear-gradient(92.88deg, #455EB5 9.16%, #5643CC 43.89%, #673FD7 64.72%);
+      border-radius: 8px;
+      border-style: none;
+      box-sizing: border-box;
+      color: #FFFFFF;
+      cursor: pointer;
+      flex-shrink: 0;
+      font-family: "Inter UI", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+      font-size: 16px;
+      font-weight: 500;
+      height: 4rem;
+      padding: 0 1.6rem;
+      text-align: center;
+      text-shadow: rgba(0, 0, 0, 0.25) 0 3px 8px;
+      transition: all .5s;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
 
-        .button-36:hover {
-            box-shadow: rgba(80, 63, 205, 0.5) 0 1px 30px;
-            transition-duration: .1s;
-        }
+    .button-36:hover {
+      box-shadow: rgba(80, 63, 205, 0.5) 0 1px 30px;
+      transition-duration: .1s;
+    }
 
-        @media (min-width: 768px) {
-            .button-36 {
-                padding: 0 2.6rem;
-            }
-            .button-delete{
-                padding: 0 2.6rem;
-            }
-        }
+    @media (min-width: 768px) {
+      .button-36 {
+        padding: 0 2.6rem;
+      }
 
-        .button-delete{
-            background-image: linear-gradient(92.88deg, #f44336 9.16%, #f44336 43.89%, #f44336 64.72%);
-            border-radius: 8px;
-            border-style: none;
-            box-sizing: border-box;
-            color: #FFFFFF;
-            cursor: pointer;
-            flex-shrink: 0;
-            font-family: "Inter UI","SF Pro Display",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen,Ubuntu,Cantarell,"Open Sans","Helvetica Neue",sans-serif;
-            font-size: 16px;
-            font-weight: 500;
-            height: 4rem;
-            padding: 0 1.6rem;
-            text-align: center;
-            text-shadow: rgba(0, 0, 0, 0.25) 0 3px 8px;
-            transition: all .5s;
-            user-select: none;
-            -webkit-user-select: none;
-            touch-action: manipulation;
-        }
+      .button-delete {
+        padding: 0 2.6rem;
+      }
+    }
 
-        .button-delete:hover {
-            box-shadow: rgba(244, 67, 54, 0.5) 0 1px 30px;
-            transition-duration: .1s;
-        }
+    .button-delete {
+      background-image: linear-gradient(92.88deg, #f44336 9.16%, #f44336 43.89%, #f44336 64.72%);
+      border-radius: 8px;
+      border-style: none;
+      box-sizing: border-box;
+      color: #FFFFFF;
+      cursor: pointer;
+      flex-shrink: 0;
+      font-family: "Inter UI", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+      font-size: 16px;
+      font-weight: 500;
+      height: 4rem;
+      padding: 0 1.6rem;
+      text-align: center;
+      text-shadow: rgba(0, 0, 0, 0.25) 0 3px 8px;
+      transition: all .5s;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
 
-        .table-left{
-            text-align: left;
-        }
+    .button-delete:hover {
+      box-shadow: rgba(244, 67, 54, 0.5) 0 1px 30px;
+      transition-duration: .1s;
+    }
 
-        .thumbnail{
-            border: 1px solid #ddd; /* Gray border */
-            border-radius: 4px;  /* Rounded border */
-            padding: 5px; /* Some padding */
-            width: 150px; /* Set a small width */
-        }
+    .table-left {
+      text-align: left;
+    }
 
-        .thumbnail:hover{
-            box-shadow: 0 0 2px 1px rgba(0, 140, 186, 0.5);
-        }
+    .thumbnail {
+      border: 1px solid #ddd;
+      /* Gray border */
+      border-radius: 4px;
+      /* Rounded border */
+      padding: 5px;
+      /* Some padding */
+      width: 150px;
+      /* Set a small width */
+    }
 
-        .table {
-            width: 100%;
-        }
+    .thumbnail:hover {
+      box-shadow: 0 0 2px 1px rgba(0, 140, 186, 0.5);
+    }
 
-        td{
-            text-align: center;
-        }
+    .table {
+      width: 100%;
+    }
 
-        label {
-            display: flex;
-            align-content: center;
-            justify-content: center;
-            margin: 0 auto;
-        }
+    td {
+      text-align: center;
+    }
 
-        select {
-            width: 10em;
-            margin-bottom: 10px;
-            margin-top: 10px;
-        }
+    label {
+      display: flex;
+      align-content: center;
+      justify-content: center;
+      margin: 0 auto;
+    }
 
-    </style>
+    select {
+      width: 10em;
+      margin-bottom: 10px;
+      margin-top: 10px;
+    }
+  </style>
 </head>
-<body class="{{(index .Settings "theme").Value}}">
-    <form method="post" action="/new/">
-        <label>
-            New Sub Url
-            <input type="text" name="subUrl">
-        </label>
-        <input type="submit" value="Open" class="button-36">
-    </form>
 
-    <form method="post" action="/setting/">
-        <label for="theme">Theme</label>
-        <select onchange="this.form.submit()" id="theme" name="theme">
-            <option {{if eq (index .Settings "theme").Value "white"}} selected {{end}} value="white">White</option>
-            <option {{if eq (index .Settings "theme").Value "dark"}} selected {{end}} value="dark">Dark</option>
-        </select>
-        <input type="hidden" name="setting" value="theme">
-    </form>
+<body class="{{(index .Settings " theme").Value}}">
+  <form method="post" action="/new/">
+    <label>
+      New Sub Url
+      <input type="text" name="subUrl">
+    </label>
+    <input type="submit" value="Open" class="button-36">
+  </form>
 
-    <table class="table">
-        <tr>
-            <th>Thumbnail</th>
-            <th class="table-left"><a href="setting/set/order/title">Title</a></th>
-            <th><a href="setting/set/order/chapter">Current Chapter</a></th>
-            <th><a href="setting/set/order/last">Last Accessed</a></th>
-            <th>Link</th>
-            <th>Delete</th>
-        </tr>
-        {{range .Mangas}}
-            <tr>
-                <td>
-                    <a target="_blank" href="/img/{{.ThumbnailUrl}}">
-                        <img class="thumbnail" src="/img/{{.ThumbnailUrl}}" alt="img_{{.ThumbnailUrl}}"/>
-                    </a>
-                </td>
-                <td class="table-left">{{.Title}}</td>
-                <td>{{.Number}} / {{.LastNumber}}</td>
-                <td>{{.LastTime}}</td>
-                <td>
-                    <a href="/new/{{.Url}}">
-                        <button class="button-36">
-                            To chapter
-                        </button>
-                    </a>
-                </td>
-                <td>
-                    <form method="post" action="/delete">
-                        <input type="hidden" name="mangaId" value="{{.ID}}">
-                        <input type="submit" class="button-delete" value="Delete">
-                    </form>
-                </td>
-            </tr>
-        {{end}}
-    </table>
+  <a href="/update">
+    <button class="button-36">
+      Update Chapters
+    </button>
+  </a>
+
+  <form method="post" action="/setting/">
+    <label for="theme">Theme</label>
+    <select onchange="this.form.submit()" id="theme" name="theme">
+      <option {{if eq (index .Settings "theme" ).Value "white" }} selected {{end}} value="white">White</option>
+      <option {{if eq (index .Settings "theme" ).Value "dark" }} selected {{end}} value="dark">Dark</option>
+    </select>
+    <input type="hidden" name="setting" value="theme">
+  </form>
+
+  <table class="table">
+    <tr>
+      <th>Thumbnail</th>
+      <th class="table-left"><a href="setting/set/order/title">Title</a></th>
+      <th><a href="setting/set/order/chapter">Current Chapter</a></th>
+      <th><a href="setting/set/order/last">Last Accessed</a></th>
+      <th>Link</th>
+      <th>Delete</th>
+    </tr>
+    {{range .Mangas}}
+    <tr>
+      <td>
+        <a target="_blank" href="/img/{{.ThumbnailUrl}}">
+          <img class="thumbnail" src="/img/{{.ThumbnailUrl}}" alt="img_{{.ThumbnailUrl}}" />
+        </a>
+      </td>
+      <td class="table-left">{{.Title}}</td>
+      <td>{{.Number}} / {{.LastNumber}}</td>
+      <td>{{.LastTime}}</td>
+      <td>
+        <a href="/new/{{.Url}}">
+          <button class="button-36">
+            To chapter
+          </button>
+        </a>
+      </td>
+      <td>
+        <form method="post" action="/delete">
+          <input type="hidden" name="mangaId" value="{{.ID}}">
+          <input type="submit" class="button-delete" value="Delete">
+        </form>
+      </td>
+    </tr>
+    {{end}}
+  </table>
 </body>
+
 </html>

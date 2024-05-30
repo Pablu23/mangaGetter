@@ -67,6 +67,7 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("/favicon.ico", s.HandleFavicon)
 	s.mux.HandleFunc("POST /setting/", s.HandleSetting)
 	s.mux.HandleFunc("GET /setting/set/{setting}/{value}", s.HandleSettingSet)
+  s.mux.HandleFunc("GET /update", s.HandleUpdate)
 }
 
 func (s *Server) StartTLS(port int, certFile, keyFile string) error {
@@ -89,22 +90,26 @@ func (s *Server) Start(port int) error {
 	return server.ListenAndServe()
 }
 
+func (s *Server) UpdateMangaList() {
+	var all []*database.Manga
+	s.DbMgr.Db.Find(&all)
+	for _, m := range all {
+		err, updated := s.UpdateLatestAvailableChapter(m)
+		if err != nil {
+			fmt.Println(err)
+		}
+		if updated {
+			s.DbMgr.Db.Save(m)
+		}
+	}
+}
+
 func (s *Server) RegisterUpdater(interval time.Duration) {
 	go func(s *Server) {
 		for {
 			select {
 			case <-time.After(interval):
-				var all []*database.Manga
-				s.DbMgr.Db.Find(&all)
-				for _, m := range all {
-					err, updated := s.UpdateLatestAvailableChapter(m)
-					if err != nil {
-						fmt.Println(err)
-					}
-					if updated {
-						s.DbMgr.Db.Save(m)
-					}
-				}
+				s.UpdateMangaList()
 			}
 		}
 	}(s)

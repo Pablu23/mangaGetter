@@ -18,8 +18,12 @@ import (
 	"time"
 )
 
+func (s *Server) HandleUpdate(w http.ResponseWriter, r *http.Request){
+  s.UpdateMangaList()
+  http.Redirect(w, r, "/", http.StatusFound)
+}
+
 func (s *Server) HandleLoginPost(w http.ResponseWriter, r *http.Request) {
-  fmt.Println("Setting auth")
 	secret := r.PostFormValue("secret")
 	http.SetCookie(w, &http.Cookie{
 		Name:       "auth",

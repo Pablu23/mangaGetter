@@ -85,6 +85,8 @@ func (s *Server) Start() error {
 		Addr:    fmt.Sprintf(":%d", s.options.Port),
 		Handler: s.mux,
 	}
+	s.RegisterRoutes()
+	s.registerUpdater()
 
 	if s.options.Auth.Enabled {
 		auth := s.options.Auth.Get()
@@ -101,8 +103,6 @@ func (s *Server) Start() error {
 		s.secret = strings.TrimSpace(s.secret)
 		server.Handler = s.Auth(s.mux)
 	}
-
-	s.registerUpdater()
 
 	if s.options.Tls.Enabled {
 		tls := s.options.Tls.Get()

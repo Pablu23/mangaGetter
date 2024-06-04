@@ -26,16 +26,19 @@ func (s *Server) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) HandleLoginPost(w http.ResponseWriter, r *http.Request) {
-	secret := r.PostFormValue("secret")
-	http.SetCookie(w, &http.Cookie{
-		Name:     "auth",
-		Value:    secret,
-		Path:     "/",
-		MaxAge:   3600,
-		Secure:   false,
-		HttpOnly: false,
-		SameSite: http.SameSiteLaxMode,
-	})
+	if s.options.Auth.Enabled {
+		auth := s.options.Auth.Get()
+		secret := r.PostFormValue("secret")
+		http.SetCookie(w, &http.Cookie{
+			Name:     "auth",
+			Value:    secret,
+			Path:     "/",
+			MaxAge:   auth.MaxAge,
+			Secure:   auth.Secure,
+			HttpOnly: false,
+			SameSite: http.SameSiteLaxMode,
+		})
+	}
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 

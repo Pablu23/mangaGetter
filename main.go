@@ -32,6 +32,8 @@ var (
 	debugFlag          = flag.Bool("debug", false, "Activate debug Logs")
 	prettyLogsFlag     = flag.Bool("pretty", false, "Pretty pring Logs")
 	logPathFlag        = flag.String("log", "", "Path to logfile, stderr if default")
+	maxAgeFlag         = flag.Int("age", 3600, "Max age for login Session")
+	secureFlag         = flag.Bool("secure", false, "Cookie secure?")
 )
 
 func main() {
@@ -88,6 +90,8 @@ func setupAuth() server.AuthOptions {
 		authOptions.Secret = path
 		authOptions.LoadType = server.File
 	}
+	authOptions.MaxAge = *maxAgeFlag
+	authOptions.Secure = *secureFlag
 	return authOptions
 }
 

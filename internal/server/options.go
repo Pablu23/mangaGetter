@@ -39,6 +39,8 @@ type AuthOptions struct {
 	// Secret Direct or Path to secret File
 	Secret   string
 	LoadType AuthType
+	Secure   bool
+	MaxAge   int
 }
 
 type TlsOptions struct {

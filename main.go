@@ -51,7 +51,11 @@ func main() {
 	mux := http.NewServeMux()
 	s := server.New(&provider.Bato{}, &db, mux, func(o *server.Options) {
 		authOptions := setupAuth()
-		o.Auth.Set(authOptions)
+		o.Port = *portFlag
+
+		if *secretFlag != "" || *secretFilePathFlag != "" || *authFlag {
+			o.Auth.Set(authOptions)
+		}
 		interval, err := time.ParseDuration(*updateIntervalFlag)
 		if err != nil {
 			log.Fatal().Err(err).Str("Interval", *updateIntervalFlag).Msg("Could not parse interval")

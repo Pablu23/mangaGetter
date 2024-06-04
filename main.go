@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/pablu23/mangaGetter/internal/database"
@@ -29,18 +28,101 @@ var (
 	databaseFlag       = flag.String("database", "", "Path to sqlite.db file")
 	certFlag           = flag.String("cert", "", "Path to cert file, has to be used in conjunction with key")
 	keyFlag            = flag.String("key", "", "Path to key file, has to be used in conjunction with cert")
-	updateIntervalFlag = flag.String("update", "1h", "Interval to update Mangas")
+	updateIntervalFlag = flag.String("update", "0h", "Interval to update Mangas")
 	debugFlag          = flag.Bool("debug", false, "Activate debug Logs")
 	prettyLogsFlag     = flag.Bool("pretty", false, "Pretty pring Logs")
 	logPathFlag        = flag.String("log", "", "Path to logfile, stderr if default")
 )
 
 func main() {
-	var secret string = ""
-	var filePath string
-
 	flag.Parse()
 
+	setupLogging()
+
+	filePath := setupDb()
+	db := database.NewDatabase(filePath, true, *debugFlag)
+	err := db.Open()
+	if err != nil {
+		log.Fatal().Err(err).Str("Path", filePath).Msg("Could not open Database")
+	}
+
+	mux := http.NewServeMux()
+	s := server.New(&provider.Bato{}, &db, mux, func(o *server.Options) {
+		authOptions := setupAuth()
+		o.Auth.Set(authOptions)
+		interval, err := time.ParseDuration(*updateIntervalFlag)
+		if err != nil {
+			log.Fatal().Err(err).Str("Interval", *updateIntervalFlag).Msg("Could not parse interval")
+		}
+		o.UpdateInterval = interval
+
+		if *certFlag != "" && *keyFlag != "" {
+			o.Tls.Apply(func(to *server.TlsOptions) {
+				to.CertPath = *certFlag
+				to.KeyPath = *keyFlag
+			})
+		}
+	})
+
+	setupClient()
+	setupClose(&db)
+	err = s.Start()
+	if err != nil {
+		log.Fatal().Err(err).Msg("Could not start server")
+	}
+}
+
+func setupAuth() server.AuthOptions {
+	var authOptions server.AuthOptions
+	if *secretFlag != "" {
+		authOptions.LoadType = server.Raw
+		authOptions.Secret = *secretFlag
+	} else if *secretFilePathFlag != "" {
+		authOptions.LoadType = server.File
+		authOptions.Secret = *secretFilePathFlag
+	} else if *authFlag {
+		path, err := getSecretPath()
+		if err != nil {
+			log.Fatal().Err(err).Msg("Secret file could not be found")
+		}
+		authOptions.Secret = path
+		authOptions.LoadType = server.File
+	}
+	return authOptions
+}
+
+func setupClient() {
+	if !*serverFlag {
+		go func() {
+			time.Sleep(300 * time.Millisecond)
+			err := open(fmt.Sprintf("http://localhost:%d", *portFlag))
+			if err != nil {
+				log.Error().Err(err).Msg("Could not open Browser")
+			}
+		}()
+	}
+}
+
+func setupClose(db *database.Manager) {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+
+	go func() {
+		for range c {
+			Close(db)
+		}
+	}()
+}
+
+func setupDb() string {
+	if *databaseFlag != "" {
+		return *databaseFlag
+	} else {
+		return getDbPath()
+	}
+}
+
+func setupLogging() {
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	if *prettyLogsFlag {
 		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
@@ -59,76 +141,6 @@ func main() {
 			MaxAge:     14,
 			MaxBackups: 10,
 		}))
-	}
-
-	if *secretFlag != "" {
-		secret = *secretFlag
-	} else if *secretFilePathFlag != "" {
-		buf, err := os.ReadFile(*secretFilePathFlag)
-		if err != nil {
-			log.Fatal().Err(err).Str("Path", *secretFilePathFlag).Msg("Could not read secret File")
-		}
-		secret = string(buf)
-	} else if *authFlag {
-		cacheSecret, err := getSecret()
-		secret = cacheSecret
-		if err != nil {
-			log.Error().Err(err).Msg("Secret file could not be found or read, not activating Auth")
-		}
-	}
-
-	if *databaseFlag != "" {
-		filePath = *databaseFlag
-	} else {
-		filePath = getDbPath()
-	}
-
-	db := database.NewDatabase(filePath, true, *debugFlag)
-	err := db.Open()
-	if err != nil {
-		log.Fatal().Err(err).Str("Path", filePath).Msg("Could not open Database")
-	}
-
-	secret = strings.TrimSpace(secret)
-	mux := http.NewServeMux()
-	s := server.New(&provider.Bato{}, &db, mux, secret)
-
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-
-	go func() {
-		for range c {
-			Close(&db)
-		}
-	}()
-
-	if !*serverFlag {
-		go func() {
-			time.Sleep(300 * time.Millisecond)
-			err := open(fmt.Sprintf("http://localhost:%d", *portFlag))
-			if err != nil {
-				log.Error().Err(err).Msg("Could not open Browser")
-			}
-		}()
-	}
-
-	interval, err := time.ParseDuration(*updateIntervalFlag)
-	if err != nil {
-		log.Fatal().Err(err).Str("Interval", *updateIntervalFlag).Msg("Could not parse interval")
-	}
-	s.RegisterUpdater(interval)
-	s.RegisterRoutes()
-
-	if *certFlag != "" && *keyFlag != "" {
-		err = s.StartTLS(*portFlag, *certFlag, *keyFlag)
-		if err != nil {
-			log.Fatal().Err(err).Str("Cert", *certFlag).Str("Key", *keyFlag).Int("Port", *portFlag).Msg("Could not start TLS server")
-		}
-	} else {
-		err = s.Start(*portFlag)
-		if err != nil {
-			log.Fatal().Err(err).Int("Port", *portFlag).Msg("Could not start server")
-		}
 	}
 }
 

@@ -2,6 +2,10 @@
 
 package main
 
+func getSecretPath() (string, error) {
+	return "", nil
+}
+
 func getSecret() (string, error) {
 	return "test", nil
 }

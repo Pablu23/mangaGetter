@@ -7,6 +7,17 @@ import (
 	"path/filepath"
 )
 
+func getSecretPath() (string, error) {
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
+
+	dirPath := filepath.Join(dir, "MangaGetter")
+	filePath := filepath.Join(dirPath, "secret.secret")
+	return filePath, nil
+}
+
 func getSecret() (string, error) {
 	dir, err := os.UserCacheDir()
 	if err != nil {

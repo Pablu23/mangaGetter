@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -37,18 +38,25 @@ type Server struct {
 
 	DbMgr *database.Manager
 
-	secret string
-	mux    *http.ServeMux
+	mux *http.ServeMux
+
+	options Options
+	secret  string
 }
 
-func New(provider provider.Provider, db *database.Manager, mux *http.ServeMux, secret string) *Server {
+func New(provider provider.Provider, db *database.Manager, mux *http.ServeMux, options ...func(*Options)) *Server {
+	opts := NewDefaultOptions()
+	for _, opt := range options {
+		opt(&opts)
+	}
+
 	s := Server{
 		ImageBuffers: make(map[string][]byte),
 		Provider:     provider,
 		DbMgr:        db,
 		Mutex:        &sync.Mutex{},
 		mux:          mux,
-		secret:       secret,
+		options:      opts,
 	}
 
 	return &s
@@ -72,23 +80,38 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("GET /update", s.HandleUpdate)
 }
 
-func (s *Server) StartTLS(port int, certFile, keyFile string) error {
-	log.Info().Int("Port", port).Str("Certificate", certFile).Str("Key", keyFile).Msg("Starting server")
+func (s *Server) Start() error {
 	server := http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
-		Handler: s.Auth(s.mux),
+		Addr:    fmt.Sprintf(":%d", s.options.Port),
+		Handler: s.mux,
 	}
-	return server.ListenAndServeTLS(certFile, keyFile)
-}
 
-func (s *Server) Start(port int) error {
-	log.Info().Int("Port", port).Msg("Starting server")
-
-	server := http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
-		Handler: s.Auth(s.mux),
+	if s.options.Auth.Enabled {
+		auth := s.options.Auth.Get()
+		switch auth.LoadType {
+		case Raw:
+			s.secret = auth.Secret
+		case File:
+			secretBytes, err := os.ReadFile(auth.Secret)
+			if err != nil {
+				return err
+			}
+			s.secret = string(secretBytes)
+		}
+		s.secret = strings.TrimSpace(s.secret)
+		server.Handler = s.Auth(s.mux)
 	}
-	return server.ListenAndServe()
+
+	s.registerUpdater()
+
+	if s.options.Tls.Enabled {
+		tls := s.options.Tls.Get()
+		log.Info().Int("Port", s.options.Port).Str("Cert", tls.CertPath).Str("Key", tls.KeyPath).Msg("Starting server")
+		return server.ListenAndServeTLS(tls.CertPath, tls.KeyPath)
+	} else {
+		log.Info().Int("Port", s.options.Port).Msg("Starting server")
+		return server.ListenAndServe()
+	}
 }
 
 func (s *Server) UpdateMangaList() {
@@ -105,15 +128,18 @@ func (s *Server) UpdateMangaList() {
 	}
 }
 
-func (s *Server) RegisterUpdater(interval time.Duration) {
-	go func(s *Server) {
-		for {
-			select {
-			case <-time.After(interval):
-				s.UpdateMangaList()
+func (s *Server) registerUpdater() {
+	if s.options.UpdateInterval > 0 {
+		log.Info().Str("Interval", s.options.UpdateInterval.String()).Msg("Registering Updater")
+		go func(s *Server) {
+			for {
+				select {
+				case <-time.After(s.options.UpdateInterval):
+					s.UpdateMangaList()
+				}
 			}
-		}
-	}(s)
+		}(s)
+	}
 }
 
 func (s *Server) LoadNext() {

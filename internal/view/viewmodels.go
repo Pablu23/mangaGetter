@@ -20,9 +20,11 @@ type MangaViewModel struct {
 	LastTime     string
 	Url          string
 	ThumbnailUrl string
+	Enabled      bool
 }
 
 type MenuViewModel struct {
+	Archive  bool
 	Settings map[string]database.Setting
 	Mangas   []MangaViewModel
 }

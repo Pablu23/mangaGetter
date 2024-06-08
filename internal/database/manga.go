@@ -7,6 +7,7 @@ type Manga struct {
 	Thumbnail      []byte
 	LastChapterNum string
 	Chapters       []Chapter
+	Enabled        bool
 	//`gorm:"foreignkey:MangaID"`
 }
 
@@ -16,6 +17,7 @@ func NewManga(id int, title string, timeStampUnix int64) Manga {
 		Title:          title,
 		TimeStampUnix:  timeStampUnix,
 		LastChapterNum: "",
+    Enabled: true,
 	}
 }
 

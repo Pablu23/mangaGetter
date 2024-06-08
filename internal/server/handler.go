@@ -20,6 +20,21 @@ import (
 	"gorm.io/gorm"
 )
 
+func (s *Server) HandleDisable(w http.ResponseWriter, r *http.Request) {
+	id := r.PostFormValue("mangaId")
+	var manga database.Manga
+	s.DbMgr.Db.Where("id = ?", id).First(&manga)
+
+	if manga.Enabled {
+		http.Redirect(w, r, "/", http.StatusFound)
+	} else {
+		http.Redirect(w, r, "/archive", http.StatusFound)
+	}
+
+	manga.Enabled = !manga.Enabled
+	s.DbMgr.Db.Save(&manga)
+}
+
 func (s *Server) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	s.UpdateMangaList()
 	http.Redirect(w, r, "/", http.StatusFound)
@@ -64,13 +79,9 @@ func (s *Server) HandleNew(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/current/", http.StatusFound)
 }
 
-func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
-	tmpl := template.Must(view.GetViewTemplate(view.Menu))
+func (s *Server) HandleArchive(w http.ResponseWriter, r *http.Request) {
 	var all []*database.Manga
-	_ = s.DbMgr.Db.Preload("Chapters").Find(&all)
-	l := len(all)
-	mangaViewModels := make([]view.MangaViewModel, l)
-	counter := 0
+	_ = s.DbMgr.Db.Preload("Chapters").Where("enabled = 0").Find(&all)
 
 	var tmp []database.Setting
 	s.DbMgr.Db.Find(&tmp)
@@ -79,8 +90,32 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 		settings[m.Name] = m
 	}
 
+	s.ViewMenu(w, all, settings, true)
+}
+
+func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
+	var all []*database.Manga
+	_ = s.DbMgr.Db.Preload("Chapters").Where("enabled = 1").Find(&all)
+
+	var tmp []database.Setting
+	s.DbMgr.Db.Find(&tmp)
+	settings := make(map[string]database.Setting)
+	for _, m := range tmp {
+		settings[m.Name] = m
+	}
+
+	s.ViewMenu(w, all, settings, false)
+}
+
+func (s *Server) ViewMenu(w http.ResponseWriter, mangas []*database.Manga, settings map[string]database.Setting, archive bool) {
+	tmpl := template.Must(view.GetViewTemplate(view.Menu))
+
+	l := len(mangas)
+	mangaViewModels := make([]view.MangaViewModel, l)
+	counter := 0
+
 	//TODO: Change all this to be more performant
-	for _, manga := range all {
+	for _, manga := range mangas {
 		title := cases.Title(language.English, cases.Compact).String(strings.Replace(manga.Title, "-", " ", -1))
 
 		thumbnail, updated, err := s.LoadThumbnail(manga)
@@ -117,6 +152,7 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 			LastTime:     time.Unix(manga.TimeStampUnix, 0).Format("15:04 (02-01-06)"),
 			Url:          latestChapter.Url,
 			ThumbnailUrl: thumbnail,
+			Enabled:      manga.Enabled,
 		}
 		counter++
 	}
@@ -147,6 +183,7 @@ func (s *Server) HandleMenu(w http.ResponseWriter, _ *http.Request) {
 	menuViewModel := view.MenuViewModel{
 		Settings: settings,
 		Mangas:   mangaViewModels,
+		Archive:  archive,
 	}
 
 	err := tmpl.Execute(w, menuViewModel)

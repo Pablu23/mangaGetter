@@ -4,7 +4,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <title>Main Menu</title>
+  <title>{{if .Archive}}Archive{{else}}Main Menu{{end}}</title>
 
   <style>
     body {
@@ -128,7 +128,7 @@
   </style>
 </head>
 
-<body class="{{(index .Settings "theme").Value}}">
+<body class='{{(index .Settings "theme").Value}}'>
   <form method="post" action="/new/">
     <label>
       New Sub Url
@@ -137,11 +137,23 @@
     <input type="submit" value="Open" class="button-36">
   </form>
 
+  <a href='{{if .Archive}}/{{else}}/archive{{end}}'>
+    <button class="button-36">
+      {{if .Archive}}
+      To Main Menu
+      {{else}}
+      To Archive
+      {{end}}
+    </button>
+  </a>
+
+  {{if not .Archive}}
   <a href="/update">
     <button class="button-36">
       Update Chapters
     </button>
   </a>
+  {{end}}
 
   <form method="post" action="/setting/">
     <label for="theme">Theme</label>
@@ -159,6 +171,7 @@
       <th><a href="setting/set/order/chapter">Current Chapter</a></th>
       <th><a href="setting/set/order/last">Last Accessed</a></th>
       <th>Link</th>
+      <th>Disable/Enable</th>
       <th>Delete</th>
     </tr>
     {{range .Mangas}}
@@ -177,6 +190,12 @@
             To chapter
           </button>
         </a>
+      </td>
+      <td>
+        <form method="post" action="/disable">
+          <input type="hidden" name="mangaId" value="{{.ID}}">
+          <input type="submit" class="button-delete" value="{{if .Enabled}}Disable{{else}}Enable{{end}}">
+        </form>
       </td>
       <td>
         <form method="post" action="/delete">

@@ -78,6 +78,8 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("POST /setting/", s.HandleSetting)
 	s.mux.HandleFunc("GET /setting/set/{setting}/{value}", s.HandleSettingSet)
 	s.mux.HandleFunc("GET /update", s.HandleUpdate)
+	s.mux.HandleFunc("POST /disable", s.HandleDisable)
+	s.mux.HandleFunc("GET /archive", s.HandleArchive)
 }
 
 func (s *Server) Start() error {
@@ -116,7 +118,7 @@ func (s *Server) Start() error {
 
 func (s *Server) UpdateMangaList() {
 	var all []*database.Manga
-	s.DbMgr.Db.Find(&all)
+	s.DbMgr.Db.Where("enabled = 1").Find(&all)
 	for _, m := range all {
 		err, updated := s.UpdateLatestAvailableChapter(m)
 		if err != nil {

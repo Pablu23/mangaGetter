@@ -1,16 +1,80 @@
 <!DOCTYPE html>
 <!--suppress CssUnusedSymbol -->
 <html lang="en">
+  <head>
+    <style>
+      body {
+        background-color: rgba(10, 11, 15, 255);
+        margin: 0;
+        width: 100vw;
+        height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      form {
+        display: flex;
+        height: 100%;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+      input {
+        background-color: rgba(10, 11, 15, 255);
+        border: 1px solid rgba(104, 85, 224, 1);
+        border-radius: 4px;
+        font-weight: 600;
+        margin: 0;
+        width: 280px;
+        height: 30px;
+        padding: 10px;
+      }
+      input:focus {
+        outline: none;
+      }
+      #formcontainer {
+        border-radius: 1rem;
+        color: rgb(104, 85, 224);
+        font-weight: 600;
+        font-size: 30px;
+        background-color: rgba(16, 17, 22, 255);
+        height: 40%;
+        width: 30%;
+        box-shadow: 5px 5px 15px 5px rgba(0, 0, 0, 0.34);
+      }
+      #loginbutton {
+        color: rgb(104, 85, 224);
+        cursor: pointer;
+        font-weight: 600;
+        width: 300px;
+        height: 50px;
+        transition: 0.4s;
+        margin-top: 2rem;
+      }
+      #loginbutton:hover {
+        color: white;
+        box-shadow: 0 0 20px rgba(104, 85, 224, 0.6);
+        background-color: rgba(104, 85, 224, 1);
+      }
+      #passwordinput {
+        color: white;
+      }
+      #passwordinputbox {
+        display: flex;
+        flex-direction: column;
+      }
+    </style>
+  </head>
 
-<head>
-</head>
-
-<body>
-  <form method="post" action="/login">
-    <label>
-      Secret
-      <input type="password" name="secret">
-    </label>
-    <input type="submit" value="Login">
-  </form>
-</body>
+  <body>
+    <div id="formcontainer">
+      <form method="post" action="/login">
+        <div id="passwordinputbox">
+          <label id="passwordlabel"> Password: </label>
+          <input id="passwordinput" type="password" name="secret" />
+        </div>
+        <input id="loginbutton" type="submit" value="Login" />
+      </form>
+    </div>
+  </body>
+</html>

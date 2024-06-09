@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"crypto/tls"
 	_ "embed"
 	"fmt"
 	"io"
@@ -107,9 +108,18 @@ func (s *Server) Start() error {
 	}
 
 	if s.options.Tls.Enabled {
-		tls := s.options.Tls.Get()
-		log.Info().Int("Port", s.options.Port).Str("Cert", tls.CertPath).Str("Key", tls.KeyPath).Msg("Starting server")
-		return server.ListenAndServeTLS(tls.CertPath, tls.KeyPath)
+		tlsOpts := s.options.Tls.Get()
+		server.TLSConfig = &tls.Config{
+			GetCertificate: func(chi *tls.ClientHelloInfo) (*tls.Certificate, error) {
+				cert, err := tls.LoadX509KeyPair(tlsOpts.CertPath, tlsOpts.KeyPath)
+				if err != nil {
+					return nil, err
+				}
+				return &cert, err
+			},
+		}
+		log.Info().Int("Port", s.options.Port).Str("Cert", tlsOpts.CertPath).Str("Key", tlsOpts.KeyPath).Msg("Starting server")
+		return server.ListenAndServeTLS("", "")
 	} else {
 		log.Info().Int("Port", s.options.Port).Msg("Starting server")
 		return server.ListenAndServe()

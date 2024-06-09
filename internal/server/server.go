@@ -70,7 +70,7 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("/new/", s.HandleNewQuery)
 	s.mux.HandleFunc("/new/title/{title}/{chapter}", s.HandleNew)
 	s.mux.HandleFunc("/current/", s.HandleCurrent)
-	s.mux.HandleFunc("/img/{url}/", s.HandleImage)
+	s.mux.HandleFunc("/img/{url}", s.HandleImage)
 	s.mux.HandleFunc("POST /next", s.HandleNext)
 	s.mux.HandleFunc("POST /prev", s.HandlePrev)
 	s.mux.HandleFunc("POST /exit", s.HandleExit)

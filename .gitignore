@@ -8,3 +8,5 @@ h.html
 *.exe
 *secret*
 mangaGetter
+*.crt
+*.key

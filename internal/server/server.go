@@ -81,6 +81,9 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("GET /update", s.HandleUpdate)
 	s.mux.HandleFunc("POST /disable", s.HandleDisable)
 	s.mux.HandleFunc("GET /archive", s.HandleArchive)
+	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	})
 }
 
 func (s *Server) Start() error {

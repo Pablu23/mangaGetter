@@ -135,7 +135,7 @@ func setupLogging() {
 	if *prettyLogsFlag {
 		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 	}
-	if !*debugFlag {
+	if *debugFlag {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	}
 
